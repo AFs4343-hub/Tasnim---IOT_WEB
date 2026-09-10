@@ -15,7 +15,11 @@ import NodeCard from './components/NodeCard'
 import DeltaPanel from './components/DeltaPanel'
 import AnomalyPanel from './components/AnomalyPanel'
 import HistoryExplorer from './components/HistoryExplorer'
+import NodeMap from './components/NodeMap'
+import DashboardNav from './components/DashboardNav'
 import StatisticsPanel from './components/StatisticsPanel'
+import SystemOverview from './components/SystemOverview'
+import ConnectionStateBanner from './components/ConnectionStateBanner'
 
 
 function App() {
@@ -424,33 +428,24 @@ function App() {
 
 
 
-  // =========================================
-  // STATUS SISTEM
-  // =========================================
-
-  const systemOnline =
-    firebaseStatus === 'online'
-
-
-
   return (
 
     <main className="min-h-screen bg-slate-950 text-white">
 
-      <div className="mx-auto max-w-7xl px-6 py-10">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
 
 
         {/* =================================
             HEADER
         ================================= */}
 
-        <header className="mb-10">
+        <header className="mb-7 sm:mb-10">
 
           <p className="text-sm font-semibold tracking-widest text-cyan-400">
             MULTI-NODE IoT-WEB
           </p>
 
-          <h1 className="mt-2 text-5xl font-bold">
+          <h1 className="mt-2 text-4xl font-bold sm:text-5xl">
             TASNIM
           </h1>
 
@@ -464,137 +459,67 @@ function App() {
 
 
         {/* =================================
-            STATUS SISTEM
+            NAVIGASI DASHBOARD
         ================================= */}
 
-        <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
-
-            <div>
-
-              <p className="text-sm text-slate-400">
-                Status Sistem
-              </p>
-
-
-              <h2 className="mt-1 text-xl font-semibold">
-
-                {firebaseStatus === 'connecting'
-                  ? 'Menghubungkan ke Firebase...'
-
-                  : firebaseStatus === 'online'
-                  ? 'Monitoring Aktif'
-
-                  : firebaseStatus === 'empty'
-                  ? 'Database Kosong'
-
-                  : 'Koneksi Bermasalah'}
-
-              </h2>
-
-
-              {lastUpdate && (
-
-                <p className="mt-2 text-xs text-slate-500">
-
-                  Update terakhir:{' '}
-
-                  {lastUpdate
-                    .toLocaleTimeString('id-ID')}
-
-                </p>
-
-              )}
-
-            </div>
+        <DashboardNav />
 
 
 
-            <div
-              className={`flex items-center gap-2 ${
-                systemOnline
-                  ? 'text-emerald-400'
-                  : 'text-amber-400'
-              }`}
-            >
+        {/* =================================
+            STATUS / OVERVIEW SISTEM
+        ================================= */}
 
-              <span
-                className={`h-3 w-3 rounded-full ${
-                  systemOnline
-                    ? 'bg-emerald-400'
-                    : 'bg-amber-400'
-                }`}
-              />
+        <section id="status" className="scroll-mt-28 mb-8">
 
-
-              <span className="font-medium">
-
-                {systemOnline
-                  ? 'Firebase Online'
-                  : 'Menunggu Data'}
-
-              </span>
-
-            </div>
-
-
-          </div>
+          <SystemOverview
+            firebaseStatus={firebaseStatus}
+            lastUpdate={lastUpdate}
+            nodes={nodesWithStatus}
+            historyCount={history.length}
+          />
 
         </section>
 
 
-
         {/* =================================
-            ERROR FIREBASE
+            STATUS KONEKSI / EMPTY STATE
         ================================= */}
 
-        {firebaseStatus === 'error' && (
-
-          <section className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
-
-            <h2 className="font-semibold text-red-400">
-              Gagal terhubung ke Firebase
-            </h2>
-
-            <p className="mt-2 text-sm text-slate-400">
-              Periksa konfigurasi .env, firebase.js,
-              databaseURL, dan Firebase Realtime
-              Database Rules.
-            </p>
-
-          </section>
-
-        )}
-
-
-
-        {/* =================================
-            LOADING FIREBASE
-        ================================= */}
-
-        {firebaseStatus === 'connecting' && (
-
-          <section className="mb-8 rounded-2xl border border-cyan-500/30 bg-slate-900 p-5">
-
-            <p className="text-cyan-400">
-              Mengambil data N0, N1, dan N2 dari Firebase...
-            </p>
-
-          </section>
-
-        )}
-
+        <ConnectionStateBanner
+          firebaseStatus={firebaseStatus}
+          hasNodes={Boolean(nodesWithStatus)}
+          historyCount={history.length}
+        />
 
 
         {/* =================================
             MONITORING NODE
         ================================= */}
 
+        {!nodesWithStatus && firebaseStatus !== 'connecting' && firebaseStatus !== 'error' && (
+
+          <section
+            id="monitoring"
+            className="scroll-mt-28 rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-8 text-center"
+          >
+
+            <h2 className="text-lg font-semibold text-slate-300">
+              Belum ada data node
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+              Dashboard sudah siap. Saat N0, N1, atau N2 mulai mengirim data ke Firebase,
+              kartu monitoring akan muncul otomatis tanpa perlu mengubah kode.
+            </p>
+
+          </section>
+
+        )}
+
         {nodesWithStatus && (
 
-          <section>
+          <section id="monitoring" className="scroll-mt-28">
 
             <div className="mb-5">
 
@@ -636,7 +561,7 @@ function App() {
             GRAFIK RIWAYAT
         ================================= */}
 
-        <section className="mt-8">
+        <section id="grafik" className="scroll-mt-28 mt-8">
 
           <TrendChart
             data={history}
@@ -651,7 +576,7 @@ function App() {
             STATISTIK DESKRIPTIF
         ================================= */}
 
-        <section className="mt-8">
+        <section id="statistik" className="scroll-mt-28 mt-8">
 
           <StatisticsPanel
             data={history}
@@ -667,7 +592,7 @@ function App() {
 
         {nodesWithStatus && (
 
-          <section className="mt-8">
+          <section id="spasial" className="scroll-mt-28 mt-8">
 
             <div className="mb-5">
 
@@ -712,7 +637,7 @@ function App() {
             KINERJA SISTEM IOT
         ================================= */}
 
-        <section className="mt-8">
+        <section id="iot" className="scroll-mt-28 mt-8">
 
           <IoTPerformancePanel
             nodes={nodesWithStatus}
@@ -724,11 +649,26 @@ function App() {
 
 
 
+
+        {/* =================================
+            PETA NODE
+        ================================= */}
+
+        <section id="peta" className="scroll-mt-28 mt-8">
+
+          <NodeMap
+            nodes={nodesWithStatus}
+          />
+
+        </section>
+
+
+
         {/* =================================
             AI / DETEKSI ANOMALI
         ================================= */}
 
-        <section className="mt-8">
+        <section id="ai" className="scroll-mt-28 mt-8">
 
           <AnomalyPanel
             status="Menunggu AI"
@@ -745,7 +685,7 @@ function App() {
             RIWAYAT DATA + FILTER + EXPORT
         ================================= */}
 
-        <section className="mt-8">
+        <section id="riwayat" className="scroll-mt-28 mt-8">
 
           <HistoryExplorer
             data={history}
