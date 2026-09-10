@@ -9,12 +9,13 @@ import {
 } from 'firebase/database'
 
 import { database } from './services/firebase'
-
+import IoTPerformancePanel from './components/IoTPerformancePanel'
 import TrendChart from './components/TrendChart'
 import NodeCard from './components/NodeCard'
 import DeltaPanel from './components/DeltaPanel'
 import AnomalyPanel from './components/AnomalyPanel'
-import HistoryTable from './components/HistoryTable'
+import HistoryExplorer from './components/HistoryExplorer'
+import StatisticsPanel from './components/StatisticsPanel'
 
 
 function App() {
@@ -36,6 +37,26 @@ function App() {
   // Waktu terakhir data terbaru diterima
   const [lastUpdate, setLastUpdate] =
     useState(null)
+
+  // Waktu saat ini untuk mengecek status Online/Offline node
+  const [currentTime, setCurrentTime] =
+    useState(Date.now())
+
+
+  // =========================================
+  // TIMER STATUS NODE
+  // =========================================
+
+  useEffect(() => {
+
+    // Cek ulang status setiap 30 detik meskipun Firebase tidak mengirim data baru
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 30000)
+
+    return () => clearInterval(timer)
+
+  }, [])
 
 
   // =========================================
@@ -83,10 +104,13 @@ function App() {
               data?.N0?.latest?.turbidity ?? 0
             ),
 
-            status:
-              data?.N0?.latest
-                ? 'Online'
-                : 'Tidak Ada Data',
+            timestamp: Number(
+              data?.N0?.latest?.timestamp ?? 0
+            ),
+
+            lastSeen: Number(
+              data?.N0?.latest?.timestamp ?? 0
+            ),
 
             hasData:
               Boolean(data?.N0?.latest)
@@ -109,10 +133,13 @@ function App() {
               data?.N1?.latest?.turbidity ?? 0
             ),
 
-            status:
-              data?.N1?.latest
-                ? 'Online'
-                : 'Tidak Ada Data',
+            timestamp: Number(
+              data?.N1?.latest?.timestamp ?? 0
+            ),
+
+            lastSeen: Number(
+              data?.N1?.latest?.timestamp ?? 0
+            ),
 
             hasData:
               Boolean(data?.N1?.latest)
@@ -135,10 +162,13 @@ function App() {
               data?.N2?.latest?.turbidity ?? 0
             ),
 
-            status:
-              data?.N2?.latest
-                ? 'Online'
-                : 'Tidak Ada Data',
+            timestamp: Number(
+              data?.N2?.latest?.timestamp ?? 0
+            ),
+
+            lastSeen: Number(
+              data?.N2?.latest?.timestamp ?? 0
+            ),
 
             hasData:
               Boolean(data?.N2?.latest)
@@ -344,81 +374,53 @@ function App() {
 
 
   // =========================================
-  // DATA UNTUK HISTORY TABLE
+  // STATUS ONLINE / OFFLINE NODE
   // =========================================
 
-  const historyData = history
+  const getNodeStatus = (timestamp) => {
 
-    .flatMap((record) => {
+    if (!timestamp) {
+      return 'Tidak Ada Data'
+    }
 
-      const formattedTime =
-        new Date(
-          record.timestamp
-        ).toLocaleString('id-ID')
+    const difference =
+      currentTime - Number(timestamp)
+
+    // Batas sementara: 10 menit
+    // Karena interval pengiriman direncanakan sekitar 5 menit.
+    const offlineThreshold =
+      10 * 60 * 1000
+
+    if (difference <= offlineThreshold) {
+      return 'Online'
+    }
+
+    return 'Offline'
+  }
 
 
-      // Satu timestamp Firebase
-      // dipecah menjadi tiga baris:
-      // N0, N1, N2
+  // =========================================
+  // NODE + STATUS HASIL PERHITUNGAN
+  // =========================================
 
-      return [
-
-        {
-          time: formattedTime,
-          node: 'N0',
-
-          ph:
-            record.N0_ph,
-
-          tds:
-            record.N0_tds,
-
-          turbidity:
-            record.N0_turbidity,
-
-          status: 'Normal'
+  const nodesWithStatus = nodes
+    ? {
+        N0: {
+          ...nodes.N0,
+          status: getNodeStatus(nodes.N0.timestamp)
         },
 
-
-        {
-          time: formattedTime,
-          node: 'N1',
-
-          ph:
-            record.N1_ph,
-
-          tds:
-            record.N1_tds,
-
-          turbidity:
-            record.N1_turbidity,
-
-          status: 'Normal'
+        N1: {
+          ...nodes.N1,
+          status: getNodeStatus(nodes.N1.timestamp)
         },
 
-
-        {
-          time: formattedTime,
-          node: 'N2',
-
-          ph:
-            record.N2_ph,
-
-          tds:
-            record.N2_tds,
-
-          turbidity:
-            record.N2_turbidity,
-
-          status: 'Normal'
+        N2: {
+          ...nodes.N2,
+          status: getNodeStatus(nodes.N2.timestamp)
         }
-
-      ]
-
-    })
-
-    // Data terbaru tampil di atas tabel
-    .reverse()
+      }
+    : null
 
 
 
@@ -590,7 +592,7 @@ function App() {
             MONITORING NODE
         ================================= */}
 
-        {nodes && (
+        {nodesWithStatus && (
 
           <section>
 
@@ -611,15 +613,15 @@ function App() {
             <div className="grid gap-5 lg:grid-cols-3">
 
               <NodeCard
-                {...nodes.N0}
+                {...nodesWithStatus.N0}
               />
 
               <NodeCard
-                {...nodes.N1}
+                {...nodesWithStatus.N1}
               />
 
               <NodeCard
-                {...nodes.N2}
+                {...nodesWithStatus.N2}
               />
 
             </div>
@@ -644,11 +646,26 @@ function App() {
 
 
 
+
+        {/* =================================
+            STATISTIK DESKRIPTIF
+        ================================= */}
+
+        <section className="mt-8">
+
+          <StatisticsPanel
+            data={history}
+          />
+
+        </section>
+
+
+
         {/* =================================
             ANALISIS SPASIAL
         ================================= */}
 
-        {nodes && (
+        {nodesWithStatus && (
 
           <section className="mt-8">
 
@@ -671,14 +688,14 @@ function App() {
 
               <DeltaPanel
                 title="N0 → N1"
-                upstream={nodes.N0}
-                downstream={nodes.N1}
+                upstream={nodesWithStatus.N0}
+                downstream={nodesWithStatus.N1}
               />
 
               <DeltaPanel
                 title="N0 → N2"
-                upstream={nodes.N0}
-                downstream={nodes.N2}
+                upstream={nodesWithStatus.N0}
+                downstream={nodesWithStatus.N2}
               />
 
             </div>
@@ -686,6 +703,24 @@ function App() {
           </section>
 
         )}
+        
+
+
+
+
+        {/* =================================
+            KINERJA SISTEM IOT
+        ================================= */}
+
+        <section className="mt-8">
+
+          <IoTPerformancePanel
+            nodes={nodesWithStatus}
+            history={history}
+            intervalMinutes={5}
+          />
+
+        </section>
 
 
 
@@ -707,13 +742,13 @@ function App() {
 
 
         {/* =================================
-            RIWAYAT DATA
+            RIWAYAT DATA + FILTER + EXPORT
         ================================= */}
 
         <section className="mt-8">
 
-          <HistoryTable
-            data={historyData}
+          <HistoryExplorer
+            data={history}
           />
 
         </section>
