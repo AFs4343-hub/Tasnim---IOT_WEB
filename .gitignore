@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 .env.firebase/
+
+# Local environment
+.env
+
+# Firebase CLI cache
+.firebase/
