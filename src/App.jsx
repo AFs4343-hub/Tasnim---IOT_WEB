@@ -116,6 +116,16 @@ function App() {
               data?.N0?.latest?.timestamp ?? 0
             ),
 
+            rssi:
+              data?.N0?.latest?.rssi != null
+                ? Number(data.N0.latest.rssi)
+                : null,
+
+            sequence:
+              data?.N0?.latest?.sequence != null
+                ? Number(data.N0.latest.sequence)
+                : null,
+
             hasData:
               Boolean(data?.N0?.latest)
           },
@@ -145,6 +155,16 @@ function App() {
               data?.N1?.latest?.timestamp ?? 0
             ),
 
+            rssi:
+              data?.N1?.latest?.rssi != null
+                ? Number(data.N1.latest.rssi)
+                : null,
+
+            sequence:
+              data?.N1?.latest?.sequence != null
+                ? Number(data.N1.latest.sequence)
+                : null,
+
             hasData:
               Boolean(data?.N1?.latest)
           },
@@ -173,6 +193,16 @@ function App() {
             lastSeen: Number(
               data?.N2?.latest?.timestamp ?? 0
             ),
+
+            rssi:
+              data?.N2?.latest?.rssi != null
+                ? Number(data.N2.latest.rssi)
+                : null,
+
+            sequence:
+              data?.N2?.latest?.sequence != null
+                ? Number(data.N2.latest.sequence)
+                : null,
 
             hasData:
               Boolean(data?.N2?.latest)
