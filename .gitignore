@@ -39,3 +39,6 @@ ai/data/*.csv
 ai/models/*.joblib
 ai/outputs/*.json
 ai/outputs/*.csv
+
+# Firebase Admin credential
+iot/serviceAccountKey.json
