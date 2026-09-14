@@ -29,3 +29,13 @@ dist-ssr
 
 # Firebase CLI cache
 .firebase/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# TASNIM AI generated artifacts
+ai/data/*.csv
+ai/models/*.joblib
+ai/outputs/*.json
+ai/outputs/*.csv
