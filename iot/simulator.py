@@ -18,6 +18,8 @@ CREDENTIAL_PATH = Path(
 
 DEFAULT_INTERVAL = 5
 
+DATA_ROOT = "simulation"
+
 
 # ============================================================
 # KONDISI DASAR SIMULASI
@@ -83,7 +85,7 @@ def initialize_sequence():
     for node_id in NODE_CONFIG:
 
         existing = db.reference(
-            f"nodes/{node_id}/latest/sequence"
+            f"{DATA_ROOT}/nodes/{node_id}/latest/sequence"
         ).get()
 
         try:
@@ -253,7 +255,7 @@ def run_cycle(
 
 
         db.reference(
-            f"nodes/{node_id}/latest"
+            f"{DATA_ROOT}/nodes/{node_id}/latest"
         ).set(packet)
 
 
@@ -281,7 +283,7 @@ def run_cycle(
 
 
     db.reference(
-        f"history/{timestamp_ms}"
+        f"{DATA_ROOT}/history/{timestamp_ms}"
     ).set(
         history_record
     )

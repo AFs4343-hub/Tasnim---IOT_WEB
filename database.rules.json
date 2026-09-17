@@ -1,0 +1,16 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "simulation": {
+      ".read": true,
+      ".write": false
+    },
+
+    "field": {
+      ".read": true,
+      ".write": false
+    }
+  }
+}

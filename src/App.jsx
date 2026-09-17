@@ -75,7 +75,7 @@ function App() {
 
   useEffect(() => {
 
-    const nodesRef = ref(database, 'nodes')
+    const nodesRef = ref(database, 'simulation/nodes')
 
     const unsubscribe = onValue(
 
@@ -260,7 +260,7 @@ function App() {
 
     // Ambil 60 timestamp terakhir
     const historyRef = query(
-      ref(database, 'history'),
+      ref(database, 'simulation/history'),
       orderByKey(),
       limitToLast(historyLimit)
     )
@@ -486,7 +486,7 @@ function App() {
 
     const analysisRef = ref(
       database,
-      'analysis/latest'
+      'simulation/analysis/latest'
     )
 
     const unsubscribe = onValue(

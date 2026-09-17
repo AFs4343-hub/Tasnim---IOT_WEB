@@ -27,6 +27,8 @@ MODEL_PATH = Path(
 HISTORY_LIMIT = 12
 POLL_SECONDS = 5
 
+DATA_ROOT = "simulation"
+
 # Model prototype dilatih dari data simulasi
 # dengan interval pengukuran 5 menit.
 DEMO_INTERVAL_MINUTES = 5
@@ -71,7 +73,7 @@ def load_model():
 def load_recent_history():
 
     data = (
-        db.reference("history")
+        db.reference(f"{DATA_ROOT}/history")
         .order_by_key()
         .limit_to_last(HISTORY_LIMIT)
         .get()
@@ -296,13 +298,13 @@ def run_inference(
 
     # Hasil terbaru untuk dashboard realtime
     db.reference(
-        "analysis/latest"
+        f"{DATA_ROOT}/analysis/latest"
     ).set(result)
 
 
     # Arsip hasil AI pada history pengukuran yang sama
     db.reference(
-        f"history/{source_timestamp}/analysis"
+        f"{DATA_ROOT}/history/{source_timestamp}/analysis"
     ).set(result)
 
 
