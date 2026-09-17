@@ -1,3 +1,4 @@
+import argparse
 import random
 import time
 from pathlib import Path
@@ -11,47 +12,57 @@ DATABASE_URL = (
     "asia-southeast1.firebasedatabase.app"
 )
 
-CREDENTIAL_PATH = Path("iot/serviceAccountKey.json")
+CREDENTIAL_PATH = Path(
+    "iot/serviceAccountKey.json"
+)
 
-# Mode demo: 5 detik.
-# Alat nyata nanti sekitar 5 menit.
-INTERVAL_SECONDS = 5
+DEFAULT_INTERVAL = 5
 
+
+# ============================================================
+# KONDISI DASAR SIMULASI
+# ============================================================
 
 NODE_CONFIG = {
     "N0": {
         "ph": 7.20,
         "tds": 210.0,
         "turbidity": 8.0,
-        "rssi": -55
+        "rssi": -55,
     },
+
     "N1": {
         "ph": 7.15,
         "tds": 215.0,
         "turbidity": 9.0,
-        "rssi": -66
+        "rssi": -66,
     },
+
     "N2": {
         "ph": 7.10,
         "tds": 220.0,
         "turbidity": 10.0,
-        "rssi": -74
-    }
+        "rssi": -74,
+    },
 }
 
 
 sequence = {
     "N0": 0,
     "N1": 0,
-    "N2": 0
+    "N2": 0,
 }
 
 
+# ============================================================
+# FIREBASE
+# ============================================================
+
 def initialize_firebase():
+
     if not CREDENTIAL_PATH.exists():
         raise FileNotFoundError(
-            "\nCredential Firebase belum ada.\n"
-            "Letakkan file di:\n"
+            "\nCredential Firebase belum ditemukan:\n"
             "iot/serviceAccountKey.json\n"
         )
 
@@ -67,18 +78,45 @@ def initialize_firebase():
     )
 
 
-def generate_values(node_id):
+def initialize_sequence():
+
+    for node_id in NODE_CONFIG:
+
+        existing = db.reference(
+            f"nodes/{node_id}/latest/sequence"
+        ).get()
+
+        try:
+            sequence[node_id] = int(existing)
+        except (TypeError, ValueError):
+            sequence[node_id] = 0
+
+
+# ============================================================
+# GENERATOR DATA NORMAL
+# ============================================================
+
+def generate_normal_values(node_id):
+
     cfg = NODE_CONFIG[node_id]
 
     return {
         "ph": round(
-            random.gauss(cfg["ph"], 0.03),
+            random.gauss(
+                cfg["ph"],
+                0.03
+            ),
             2
         ),
+
         "tds": round(
-            random.gauss(cfg["tds"], 3.0),
+            random.gauss(
+                cfg["tds"],
+                3.0
+            ),
             2
         ),
+
         "turbidity": round(
             max(
                 0,
@@ -89,49 +127,151 @@ def generate_values(node_id):
             ),
             2
         ),
+
         "rssi": round(
             random.gauss(
                 cfg["rssi"],
                 2
             )
-        )
+        ),
     }
 
 
-def run_cycle():
+# ============================================================
+# INJEKSI ANOMALI
+# ============================================================
+
+def inject_anomaly(
+    values,
+    node_id,
+    anomaly_node,
+):
+
+    if anomaly_node is None:
+        return values
+
+    if node_id != anomaly_node:
+        return values
+
+
+    # --------------------------------------------------------
+    # Ini BUKAN ambang biologis kualitas air.
+    #
+    # Nilai sengaja dibuat menyimpang untuk menguji apakah
+    # pipeline AI-IoT-Web mampu mendeteksi perubahan.
+    # --------------------------------------------------------
+
+    values["ph"] = round(
+        values["ph"]
+        + random.uniform(
+            0.9,
+            1.3
+        ),
+        2
+    )
+
+    values["tds"] = round(
+        values["tds"]
+        + random.uniform(
+            90,
+            130
+        ),
+        2
+    )
+
+    values["turbidity"] = round(
+        values["turbidity"]
+        + random.uniform(
+            18,
+            28
+        ),
+        2
+    )
+
+    return values
+
+
+# ============================================================
+# SATU SIKLUS PENGIRIMAN
+# ============================================================
+
+def run_cycle(
+    anomaly_node=None,
+):
+
     timestamp_ms = int(
         time.time() * 1000
     )
 
-    history_record = {}
+    history_record = {
+        "meta": {
+            "data_source": "SIMULATION",
+            "mode": (
+                f"ANOMALI_{anomaly_node}"
+                if anomaly_node
+                else "NORMAL"
+            ),
+            "timestamp": timestamp_ms,
+        }
+    }
+
 
     for node_id in NODE_CONFIG:
 
         sequence[node_id] += 1
 
-        values = generate_values(
+        values = generate_normal_values(
             node_id
         )
 
+        values = inject_anomaly(
+            values,
+            node_id,
+            anomaly_node,
+        )
+
+
         packet = {
-            "ph": values["ph"],
-            "tds": values["tds"],
-            "turbidity": values["turbidity"],
-            "timestamp": timestamp_ms,
-            "sequence": sequence[node_id],
-            "rssi": values["rssi"]
+            "ph":
+                values["ph"],
+
+            "tds":
+                values["tds"],
+
+            "turbidity":
+                values["turbidity"],
+
+            "timestamp":
+                timestamp_ms,
+
+            "sequence":
+                sequence[node_id],
+
+            "rssi":
+                values["rssi"],
         }
 
-        # Data terbaru
+
         db.reference(
             f"nodes/{node_id}/latest"
         ).set(packet)
 
-        # Data histori
-        history_record[node_id] = packet
+
+        history_record[
+            node_id
+        ] = packet
+
+
+        mode_text = (
+            "ANOMALI"
+            if node_id == anomaly_node
+            else "NORMAL"
+        )
+
 
         print(
             f"{node_id} | "
+            f"{mode_text:<7} | "
             f"seq={packet['sequence']} | "
             f"pH={packet['ph']} | "
             f"TDS={packet['tds']} | "
@@ -139,43 +279,127 @@ def run_cycle():
             f"RSSI={packet['rssi']} dBm"
         )
 
-    # Ketiga node disimpan pada timestamp yang sama
+
     db.reference(
         f"history/{timestamp_ms}"
-    ).set(history_record)
+    ).set(
+        history_record
+    )
+
 
     print(
         f"History saved: {timestamp_ms}"
     )
 
-    print("-" * 70)
+    print(
+        "-" * 85
+    )
 
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Simulator IoT TASNIM"
+        )
+    )
+
+
+    parser.add_argument(
+        "--anomaly",
+        choices=[
+            "N0",
+            "N1",
+            "N2",
+        ],
+        default=None,
+        help=(
+            "Inject anomali pada node tertentu."
+        )
+    )
+
+
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=DEFAULT_INTERVAL,
+        help=(
+            "Interval simulasi dalam detik."
+        )
+    )
+
+
+    args = parser.parse_args()
+
+
     print()
-    print("TASNIM IoT Simulator")
-    print("====================")
+    print(
+        "TASNIM IoT Simulator"
+    )
+    print(
+        "===================="
+    )
+
 
     initialize_firebase()
 
-    print("Firebase connected.")
+    initialize_sequence()
+
+
     print(
-        f"Interval demo: {INTERVAL_SECONDS} detik"
+        "Firebase connected."
     )
-    print("Ctrl+C untuk berhenti.")
+
+    print(
+        f"Interval demo : "
+        f"{args.interval} detik"
+    )
+
+
+    if args.anomaly:
+
+        print(
+            f"MODE          : "
+            f"ANOMALI_{args.anomaly}"
+        )
+
+    else:
+
+        print(
+            "MODE          : NORMAL"
+        )
+
+
+    print(
+        "Ctrl+C untuk berhenti."
+    )
+
     print()
 
-    try:
-        while True:
-            run_cycle()
 
-            time.sleep(
-                INTERVAL_SECONDS
+    try:
+
+        while True:
+
+            run_cycle(
+                anomaly_node=args.anomaly
             )
 
+            time.sleep(
+                args.interval
+            )
+
+
     except KeyboardInterrupt:
+
         print()
-        print("Simulator dihentikan.")
+        print(
+            "Simulator dihentikan."
+        )
 
 
 if __name__ == "__main__":

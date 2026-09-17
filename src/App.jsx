@@ -34,6 +34,9 @@ function App() {
   // Data historis
   const [history, setHistory] = useState([])
 
+  // Hasil analisis AI realtime
+  const [analysis, setAnalysis] = useState(null)
+
   // Status koneksi Firebase
   const [firebaseStatus, setFirebaseStatus] =
     useState('connecting')
@@ -287,14 +290,11 @@ function App() {
               const numericTimestamp =
                 Number(timestamp)
 
-
               return {
 
                 timestamp:
                   numericTimestamp,
 
-
-                // Untuk label sumbu grafik
                 time:
                   new Date(
                     numericTimestamp
@@ -308,7 +308,23 @@ function App() {
 
 
                 // =====================
-                // N0
+                // DATA NODE LENGKAP
+                // =====================
+
+                N0:
+                  value?.N0 ?? null,
+
+                N1:
+                  value?.N1 ?? null,
+
+                N2:
+                  value?.N2 ?? null,
+
+
+                // =====================
+                // FORMAT LAMA
+                // Tetap dipertahankan
+                // untuk grafik/statistik
                 // =====================
 
                 N0_ph:
@@ -326,11 +342,6 @@ function App() {
                     value?.N0?.turbidity ?? 0
                   ),
 
-
-                // =====================
-                // N1
-                // =====================
-
                 N1_ph:
                   Number(
                     value?.N1?.ph ?? 0
@@ -346,11 +357,6 @@ function App() {
                     value?.N1?.turbidity ?? 0
                   ),
 
-
-                // =====================
-                // N2
-                // =====================
-
                 N2_ph:
                   Number(
                     value?.N2?.ph ?? 0
@@ -364,14 +370,24 @@ function App() {
                 N2_turbidity:
                   Number(
                     value?.N2?.turbidity ?? 0
-                  )
+                  ),
+
+
+                // =====================
+                // METADATA + AI
+                // =====================
+
+                meta:
+                  value?.meta ?? null,
+
+                analysis:
+                  value?.analysis ?? null
 
               }
 
             })
 
-
-            // Urutkan timestamp lama → baru
+            // Lama → baru untuk grafik
             .sort(
               (a, b) =>
                 a.timestamp - b.timestamp
@@ -455,6 +471,47 @@ function App() {
         }
       }
     : null
+
+
+
+
+  // =========================================
+  // FIREBASE REALTIME - HASIL AI
+  // =========================================
+
+  useEffect(() => {
+
+    const analysisRef = ref(
+      database,
+      'analysis/latest'
+    )
+
+    const unsubscribe = onValue(
+      analysisRef,
+
+      (snapshot) => {
+
+        const data = snapshot.val()
+
+        if (data) {
+          setAnalysis(data)
+        } else {
+          setAnalysis(null)
+        }
+
+      },
+
+      (error) => {
+        console.error(
+          'AI Firebase Error:',
+          error
+        )
+      }
+    )
+
+    return () => unsubscribe()
+
+  }, [])
 
 
 
@@ -594,7 +651,7 @@ function App() {
         <section id="grafik" className="scroll-mt-28 mt-8">
 
           <TrendChart
-            data={history}
+            data={history.slice(-24)}
           />
 
         </section>
@@ -701,10 +758,7 @@ function App() {
         <section id="ai" className="scroll-mt-28 mt-8">
 
           <AnomalyPanel
-            status="Menunggu AI"
-            node="-"
-            score={null}
-            message="Random Forest dan Isolation Forest belum dihubungkan ke dashboard. Z-score akan digunakan sebagai analisis statistik pendukung."
+            analysis={analysis}
           />
 
         </section>
