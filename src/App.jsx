@@ -34,6 +34,9 @@ function App() {
   // Data historis
   const [history, setHistory] = useState([])
 
+  // Jumlah history yang dimuat dari Firebase
+  const [historyLimit, setHistoryLimit] = useState(60)
+
   // Hasil analisis AI realtime
   const [analysis, setAnalysis] = useState(null)
 
@@ -259,7 +262,7 @@ function App() {
     const historyRef = query(
       ref(database, 'history'),
       orderByKey(),
-      limitToLast(60)
+      limitToLast(historyLimit)
     )
 
 
@@ -419,7 +422,7 @@ function App() {
 
     return () => unsubscribe()
 
-  }, [])
+  }, [historyLimit])
 
 
 
@@ -773,6 +776,27 @@ function App() {
 
           <HistoryExplorer
             data={history}
+            historyLimit={historyLimit}
+
+            onLoadMore={() =>
+              setHistoryLimit(
+                (current) => current + 60
+              )
+            }
+
+            onLoadLess={() =>
+              setHistoryLimit(
+                (current) =>
+                  Math.max(
+                    60,
+                    current - 60
+                  )
+              )
+            }
+
+            onResetHistory={() =>
+              setHistoryLimit(60)
+            }
           />
 
         </section>

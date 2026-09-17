@@ -9,7 +9,11 @@ const PAGE_SIZE = 10
 
 
 function HistoryExplorer({
-  data = []
+  data = [],
+  historyLimit = 60,
+  onLoadMore = null,
+  onLoadLess = null,
+  onResetHistory = null
 }) {
 
   const [statusFilter, setStatusFilter] =
@@ -1428,6 +1432,68 @@ function HistoryExplorer({
 
           }
         )}
+
+      </div>
+
+
+      {/* LOAD DATA LAMA */}
+
+      <div className="border-t border-slate-800 px-5 py-4">
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+          <div>
+
+            <p className="text-sm font-medium text-slate-300">
+              Data historis dimuat bertahap
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Maksimal {historyLimit} record terbaru sedang dimuat dari Firebase.
+            </p>
+
+          </div>
+
+
+          <div className="flex flex-wrap gap-2">
+
+            {onLoadLess && (
+              <button
+                type="button"
+                onClick={onLoadLess}
+                disabled={historyLimit <= 60}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Kurangi 60
+              </button>
+            )}
+
+
+            {onResetHistory && (
+              <button
+                type="button"
+                onClick={onResetHistory}
+                disabled={historyLimit <= 60}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Reset ke 60
+              </button>
+            )}
+
+
+            {onLoadMore && (
+              <button
+                type="button"
+                onClick={onLoadMore}
+                className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
+              >
+                Muat +60
+              </button>
+            )}
+
+          </div>
+
+        </div>
 
       </div>
 
