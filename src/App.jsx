@@ -9,6 +9,7 @@ import {
 } from 'firebase/database'
 
 import { database } from './services/firebase'
+import tasnimConfig from '../tasnim.config.json'
 import IoTPerformancePanel from './components/IoTPerformancePanel'
 import TrendChart from './components/TrendChart'
 import NodeCard from './components/NodeCard'
@@ -21,6 +22,8 @@ import StatisticsPanel from './components/StatisticsPanel'
 import SystemOverview from './components/SystemOverview'
 import ConnectionStateBanner from './components/ConnectionStateBanner'
 
+
+const DATA_ROOT = tasnimConfig.activeDataRoot
 
 function App() {
 
@@ -75,7 +78,7 @@ function App() {
 
   useEffect(() => {
 
-    const nodesRef = ref(database, 'simulation/nodes')
+    const nodesRef = ref(database, `${DATA_ROOT}/nodes`)
 
     const unsubscribe = onValue(
 
@@ -260,7 +263,7 @@ function App() {
 
     // Ambil 60 timestamp terakhir
     const historyRef = query(
-      ref(database, 'simulation/history'),
+      ref(database, `${DATA_ROOT}/history`),
       orderByKey(),
       limitToLast(historyLimit)
     )
@@ -486,7 +489,7 @@ function App() {
 
     const analysisRef = ref(
       database,
-      'simulation/analysis/latest'
+      `${DATA_ROOT}/analysis/latest`
     )
 
     const unsubscribe = onValue(

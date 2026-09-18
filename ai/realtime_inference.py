@@ -1,4 +1,5 @@
 import argparse
+import json
 import time
 from pathlib import Path
 
@@ -27,7 +28,13 @@ MODEL_PATH = Path(
 HISTORY_LIMIT = 12
 POLL_SECONDS = 5
 
-DATA_ROOT = "simulation"
+CONFIG_PATH = Path("tasnim.config.json")
+
+with CONFIG_PATH.open() as config_file:
+    TASNIM_CONFIG = json.load(config_file)
+
+DATA_ROOT = TASNIM_CONFIG["activeDataRoot"]
+DATA_MODE = TASNIM_CONFIG["mode"]
 
 # Model prototype dilatih dari data simulasi
 # dengan interval pengukuran 5 menit.

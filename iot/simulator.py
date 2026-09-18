@@ -18,7 +18,10 @@ CREDENTIAL_PATH = Path(
 
 DEFAULT_INTERVAL = 5
 
+# Simulator WAJIB menulis hanya ke area dummy.
+# Jangan pernah diarahkan ke /field.
 DATA_ROOT = "simulation"
+DATA_MODE = "SIMULATION"
 
 
 # ============================================================
