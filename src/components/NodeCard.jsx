@@ -75,7 +75,7 @@ function NodeCard({
           </p>
 
           <p className="mt-1 text-2xl font-semibold">
-            {ph}
+            {ph ?? '—'}
           </p>
 
         </div>
@@ -90,7 +90,7 @@ function NodeCard({
 
           <p className="mt-1 text-2xl font-semibold">
 
-            {tds}
+            {tds ?? '—'}
 
             <span className="ml-1 text-sm font-normal text-slate-500">
               ppm
@@ -110,7 +110,7 @@ function NodeCard({
 
           <p className="mt-1 text-2xl font-semibold">
 
-            {turbidity}
+            {turbidity ?? '—'}
 
             <span className="ml-1 text-sm font-normal text-slate-500">
               NTU

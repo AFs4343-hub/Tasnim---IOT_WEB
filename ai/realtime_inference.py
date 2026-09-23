@@ -77,14 +77,80 @@ def load_model():
     )
 
 
-def load_recent_history():
 
-    data = (
+# === TASNIM SENSOR VALIDATION ===
+def is_valid_sensor_value(sensor_name, value):
+    """
+    Validasi fisik dasar sebelum data masuk AI.
+
+    Catatan:
+    - Ini bukan batas kualitas air budidaya.
+    - Ini hanya menolak nilai sensor yang secara fisik
+      mustahil / jelas rusak.
+    """
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return False
+
+    import math
+
+    if not math.isfinite(value):
+        return False
+
+    if sensor_name == "ph":
+        return 0.0 <= value <= 14.0
+
+    if sensor_name == "tds":
+        return value >= 0.0
+
+    if sensor_name == "turbidity":
+        return value >= 0.0
+
+    return False
+
+
+def is_valid_node_packet(node):
+    if not isinstance(node, dict):
+        return False
+
+    required = (
+        "ph",
+        "tds",
+        "turbidity",
+    )
+
+    for sensor in required:
+        if sensor not in node:
+            return False
+
+        if not is_valid_sensor_value(
+            sensor,
+            node.get(sensor)
+        ):
+            return False
+
+    return True
+
+
+def load_recent_history(
+    limit=HISTORY_LIMIT,
+):
+
+    query = (
         db.reference(f"{DATA_ROOT}/history")
         .order_by_key()
-        .limit_to_last(HISTORY_LIMIT)
-        .get()
     )
+
+    # Realtime memakai window kecil.
+    # Recovery startup dapat memakai limit=None
+    # untuk membaca seluruh history.
+    if limit is not None:
+        query = query.limit_to_last(
+            limit
+        )
+
+    data = query.get()
 
     if not data:
         return None, None, None
@@ -109,15 +175,55 @@ def load_recent_history():
         ):
             continue
 
+        meta = slot.get(
+            "meta",
+            {}
+        )
+
+        if not isinstance(meta, dict):
+            meta = {}
+
+
+        session_id = meta.get(
+            "session_id"
+        )
+
+        # History lama belum mempunyai session_id.
+        # Dibuat unik per timestamp agar data legacy
+        # tidak dianggap berasal dari sesi yang sama.
+        if not session_id:
+            session_id = (
+                f"LEGACY_{source_timestamp}"
+            )
+
+
         row = {
             "source_timestamp_ms":
                 source_timestamp,
 
             "session_id":
-                "LIVE"
+                str(session_id),
+
+            # True jika record ini sudah pernah
+            # dianalisis dan memiliki /analysis.
+            "has_analysis":
+                isinstance(
+                    slot.get("analysis"),
+                    dict
+                )
         }
 
         valid = True
+
+        # Reject physically invalid sensor packets before AI
+        if not all(
+            is_valid_node_packet(
+                slot.get(node)
+            )
+            for node in NODES
+        ):
+            continue
+
 
         for node in NODES:
 
@@ -230,47 +336,55 @@ def load_recent_history():
         )
 
 
-    latest_source_timestamp = int(
-        df[
+    pending_timestamps = (
+        df.loc[
+            ~df["has_analysis"],
             "source_timestamp_ms"
-        ].iloc[-1]
+        ]
+        .astype(int)
+        .tolist()
     )
 
     return (
         df,
-        latest_source_timestamp,
+        pending_timestamps,
         time_mode
     )
 
 
-def run_inference(
-    model_bundle
+
+def process_pending_record(
+    input_df,
+    target_timestamp,
+    time_mode,
+    model_bundle,
+    write_latest=False,
 ):
+    """
+    Analisis tepat satu record history.
 
-    (
-        input_df,
-        source_timestamp,
-        time_mode
-    ) = load_recent_history()
+    Data sebelum target tetap dipertahankan agar fitur
+    temporal/rate-of-change mempunyai konteks.
+    """
 
+    target_df = (
+        input_df[
+            input_df["source_timestamp_ms"]
+            <= target_timestamp
+        ]
+        .copy()
+    )
 
-    if input_df is None:
-        print(
-            "Menunggu minimal 2 slot "
-            "history lengkap N0/N1/N2..."
-        )
-
-        return None, None
+    if target_df.empty:
+        return None
 
 
     result = predict_latest(
-        input_df,
+        target_df,
         model_bundle
     )
 
 
-    # Firebase RTDB lebih aman memakai string
-    # daripada None untuk lokasi NORMAL.
     result["location"] = (
         result.get("location")
         or "-"
@@ -278,7 +392,9 @@ def run_inference(
 
     result[
         "source_timestamp_ms"
-    ] = source_timestamp
+    ] = int(
+        target_timestamp
+    )
 
     result[
         "inference_timestamp_ms"
@@ -288,7 +404,11 @@ def run_inference(
 
     result[
         "model_stage"
-    ] = "PROTOTYPE_SIMULATION"
+    ] = (
+        "PROTOTYPE_SIMULATION"
+        if DATA_ROOT == "simulation"
+        else "FIELD_INFERENCE"
+    )
 
     result[
         "model_version"
@@ -296,76 +416,182 @@ def run_inference(
 
     result[
         "data_source"
-    ] = "SIMULATION"
+    ] = (
+        "SIMULATION"
+        if DATA_ROOT == "simulation"
+        else "FIELD"
+    )
 
     result[
         "time_mode"
     ] = time_mode
 
 
-    # Hasil terbaru untuk dashboard realtime
+    # Arsip analisis pada timestamp yang tepat.
     db.reference(
-        f"{DATA_ROOT}/analysis/latest"
+        f"{DATA_ROOT}/history/"
+        f"{target_timestamp}/analysis"
     ).set(result)
 
 
-    # Arsip hasil AI pada history pengukuran yang sama
-    db.reference(
-        f"{DATA_ROOT}/history/{source_timestamp}/analysis"
-    ).set(result)
+    # /analysis/latest hanya boleh diperbarui jika
+    # record yang sedang diproses memang data terbaru.
+    if write_latest:
+
+        db.reference(
+            f"{DATA_ROOT}/analysis/latest"
+        ).set(result)
 
 
     rf = result[
         "random_forest"
     ]
 
+
     print()
     print(
-        "AI RESULT"
+        f"PROCESSING  : "
+        f"{target_timestamp}"
     )
     print(
-        "---------"
-    )
-    print(
-        f"Status     : "
+        f"Status      : "
         f"{result['status']}"
     )
     print(
-        f"Lokasi     : "
+        f"Lokasi      : "
         f"{result['location']}"
     )
     print(
-        f"RF         : "
+        f"RF          : "
         f"{rf['prediction']}"
     )
     print(
-        f"Confidence : "
+        f"Confidence  : "
         f"{rf['confidence'] * 100:.1f}%"
     )
     print(
-        f"IF anomaly : "
+        f"IF anomaly  : "
         f"{result['isolation_forest']['is_anomaly']}"
     )
     print(
-        f"Dominan    : "
+        f"Dominan     : "
         f"{result['dominant_zscore']['parameter']} "
         f"{result['dominant_zscore']['node']}"
     )
     print(
-        f"Z-score    : "
+        f"Z-score     : "
         f"{result['dominant_zscore']['zscore']:.2f}"
     )
     print(
-        f"Time mode  : "
-        f"{time_mode}"
-    )
-    print(
-        "Saved → /analysis/latest"
+        "✓ Analysis saved"
     )
 
-    return (
-        result,
-        source_timestamp
+
+    return result
+
+
+
+def recover_full_backlog(
+    model_bundle,
+):
+    """
+    Startup recovery.
+
+    Membaca seluruh history pada DATA_ROOT dan
+    menganalisis semua record valid yang belum
+    mempunyai /analysis.
+
+    Setelah recovery selesai, realtime loop kembali
+    memakai HISTORY_LIMIT agar tetap ringan.
+    """
+
+    print()
+    print(
+        "Memeriksa backlog history..."
+    )
+
+    (
+        input_df,
+        pending_timestamps,
+        time_mode
+    ) = load_recent_history(
+        limit=None
+    )
+
+
+    if input_df is None:
+
+        print(
+            "Recovery: belum cukup "
+            "history valid."
+        )
+
+        return
+
+
+    if not pending_timestamps:
+
+        print(
+            "Recovery: tidak ada "
+            "record tertinggal."
+        )
+
+        return
+
+
+    pending_timestamps = sorted(
+        int(timestamp)
+        for timestamp
+        in pending_timestamps
+    )
+
+
+    newest_timestamp = int(
+        input_df[
+            "source_timestamp_ms"
+        ].max()
+    )
+
+
+    print(
+        f"Recovery menemukan "
+        f"{len(pending_timestamps)} "
+        f"record belum dianalisis."
+    )
+
+
+    for index, target_timestamp in enumerate(
+        pending_timestamps,
+        start=1,
+    ):
+
+        print(
+            f"[{index}/"
+            f"{len(pending_timestamps)}]"
+        )
+
+        process_pending_record(
+            input_df=input_df,
+
+            target_timestamp=
+                target_timestamp,
+
+            time_mode=
+                time_mode,
+
+            model_bundle=
+                model_bundle,
+
+            write_latest=(
+                target_timestamp
+                == newest_timestamp
+            ),
+        )
+
+
+    print()
+    print(
+        "✓ Full backlog recovery selesai."
     )
 
 
@@ -411,29 +637,90 @@ def main():
         "Model loaded."
     )
 
-    last_processed = None
-
+    # Periksa seluruh backlog sekali saat AI startup.
+    # Setelah itu loop realtime kembali memakai
+    # HISTORY_LIMIT agar tetap ringan.
+    recover_full_backlog(
+        model_bundle
+    )
 
     try:
 
         while True:
 
             (
-                result,
-                source_timestamp
-            ) = run_inference(
-                model_bundle
-            )
+                input_df,
+                pending_timestamps,
+                time_mode
+            ) = load_recent_history()
 
 
-            if (
-                source_timestamp
-                is not None
-                and source_timestamp
-                != last_processed
-            ):
-                last_processed = (
-                    source_timestamp
+            if input_df is None:
+
+                print(
+                    "Menunggu minimal 2 slot "
+                    "history lengkap N0/N1/N2..."
+                )
+
+
+            elif not pending_timestamps:
+
+                print(
+                    "Tidak ada record yang "
+                    "menunggu analisis."
+                )
+
+
+            else:
+
+                pending_timestamps = sorted(
+                    int(timestamp)
+                    for timestamp
+                    in pending_timestamps
+                )
+
+
+                newest_timestamp = int(
+                    input_df[
+                        "source_timestamp_ms"
+                    ].max()
+                )
+
+
+                print()
+                print(
+                    f"{len(pending_timestamps)} "
+                    f"record menunggu analisis."
+                )
+
+
+                for target_timestamp in (
+                    pending_timestamps
+                ):
+
+                    process_pending_record(
+                        input_df=
+                            input_df,
+
+                        target_timestamp=
+                            target_timestamp,
+
+                        time_mode=
+                            time_mode,
+
+                        model_bundle=
+                            model_bundle,
+
+                        write_latest=(
+                            target_timestamp
+                            == newest_timestamp
+                        ),
+                    )
+
+
+                print()
+                print(
+                    "Backlog selesai."
                 )
 
 

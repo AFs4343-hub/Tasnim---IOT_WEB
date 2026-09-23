@@ -122,7 +122,9 @@ function StatisticsPanel({
     const values =
       data.map(
         (record) =>
-          Number(record[key])
+          record[key] != null
+            ? Number(record[key])
+            : NaN
       )
 
 

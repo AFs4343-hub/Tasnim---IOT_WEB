@@ -1,4 +1,7 @@
-function AnomalyPanel({ analysis }) {
+function AnomalyPanel({
+  analysis,
+  syncState = 'UNKNOWN'
+}) {
 
   if (!analysis) {
     return (
@@ -18,8 +21,57 @@ function AnomalyPanel({ analysis }) {
     )
   }
 
+  const isSynced =
+    syncState === 'SYNCED'
+
+  const isPending =
+    syncState === 'PENDING'
+
+  const isStale =
+    syncState === 'STALE'
+
   const isNormal =
-    analysis.status === 'NORMAL'
+    isSynced
+    && analysis.status === 'NORMAL'
+
+  const isAnomaly =
+    isSynced
+    && analysis.status === 'ANOMALI'
+
+
+  const statusLabel =
+    isPending
+      ? 'MENUNGGU ANALISIS'
+      : isStale
+        ? 'AI TIDAK SINKRON'
+        : syncState === 'UNKNOWN'
+          ? 'STATUS TIDAK DIKETAHUI'
+          : isNormal
+            ? 'NORMAL'
+            : isAnomaly
+              ? 'ANOMALI'
+              : 'STATUS TIDAK DIKETAHUI'
+
+
+  const statusColor =
+    isNormal
+      ? 'text-emerald-400'
+      : isAnomaly
+        ? 'text-amber-400'
+        : isPending
+          ? 'text-cyan-400'
+          : 'text-slate-400'
+
+
+  const dotColor =
+    isNormal
+      ? 'bg-emerald-400'
+      : isAnomaly
+        ? 'bg-amber-400'
+        : isPending
+          ? 'bg-cyan-400'
+          : 'bg-slate-500'
+
 
   const rf =
     analysis.random_forest || {}
@@ -63,28 +115,36 @@ function AnomalyPanel({ analysis }) {
         <div className="flex items-center gap-3">
 
           <span
-            className={`h-3 w-3 rounded-full ${
-              isNormal
-                ? 'bg-emerald-400'
-                : 'bg-amber-400'
-            }`}
+            className={`h-3 w-3 rounded-full ${dotColor}`}
           />
 
           <span
-            className={`text-xl font-bold ${
-              isNormal
-                ? 'text-emerald-400'
-                : 'text-amber-400'
-            }`}
+            className={`text-xl font-bold ${statusColor}`}
           >
-            {isNormal
-              ? 'NORMAL'
-              : 'ANOMALI'}
+            {statusLabel}
           </span>
 
         </div>
 
       </div>
+
+
+      {!isSynced && (
+        <div className="mt-5 rounded-xl border border-slate-700 bg-slate-950 p-4">
+          <p className="font-semibold text-slate-200">
+            {isPending
+              ? 'Data sensor terbaru sedang menunggu analisis AI.'
+              : isStale
+                ? 'Hasil AI belum sinkron dengan data sensor terbaru.'
+                : 'Sinkronisasi hasil AI belum dapat diverifikasi.'}
+          </p>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Detail di bawah merupakan hasil analisis terakhir
+            yang tersimpan dan belum tentu mewakili data sensor terbaru.
+          </p>
+        </div>
+      )}
 
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

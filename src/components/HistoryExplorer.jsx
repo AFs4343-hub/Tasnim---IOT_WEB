@@ -11,6 +11,7 @@ const PAGE_SIZE = 10
 function HistoryExplorer({
   data = [],
   historyLimit = 60,
+  hasMoreHistory = true,
   onLoadMore = null,
   onLoadLess = null,
   onResetHistory = null
@@ -1449,7 +1450,9 @@ function HistoryExplorer({
             </p>
 
             <p className="mt-1 text-xs text-slate-500">
-              Maksimal {historyLimit} record terbaru sedang dimuat dari Firebase.
+              {hasMoreHistory
+                ? `Maksimal ${historyLimit} record terbaru sedang dimuat dari Firebase.`
+                : `Semua ${data.length} record yang tersedia sudah dimuat.`}
             </p>
 
           </div>
@@ -1485,9 +1488,12 @@ function HistoryExplorer({
               <button
                 type="button"
                 onClick={onLoadMore}
-                className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
+                disabled={!hasMoreHistory}
+                className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Muat +60
+                {hasMoreHistory
+                  ? 'Muat +60'
+                  : 'Semua data dimuat'}
               </button>
             )}
 

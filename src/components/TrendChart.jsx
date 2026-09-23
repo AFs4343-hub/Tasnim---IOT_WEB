@@ -223,7 +223,6 @@ function TrendChart({ data = [] }) {
                 stroke="#22d3ee"
                 strokeWidth={3}
                 dot={false}
-                connectNulls
               />
 
 
@@ -238,7 +237,6 @@ function TrendChart({ data = [] }) {
                 stroke="#34d399"
                 strokeWidth={3}
                 dot={false}
-                connectNulls
               />
 
 
@@ -253,7 +251,6 @@ function TrendChart({ data = [] }) {
                 stroke="#f59e0b"
                 strokeWidth={3}
                 dot={false}
-                connectNulls
               />
 
 

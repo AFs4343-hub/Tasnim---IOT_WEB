@@ -40,8 +40,18 @@ function App() {
   // Jumlah history yang dimuat dari Firebase
   const [historyLimit, setHistoryLimit] = useState(60)
 
+  // Apakah masih ada record yang lebih lama
+  // di Firebase daripada yang sedang ditampilkan.
+  const [hasMoreHistory, setHasMoreHistory] =
+    useState(true)
+
   // Hasil analisis AI realtime
   const [analysis, setAnalysis] = useState(null)
+
+  // Waktu sejak AI mulai tertinggal dari history terbaru.
+  // Tidak di-reset setiap kali sensor mengirim record baru.
+  const [analysisMismatchSince, setAnalysisMismatchSince] =
+    useState(null)
 
   // Status koneksi Firebase
   const [firebaseStatus, setFirebaseStatus] =
@@ -105,25 +115,25 @@ function App() {
             node: 'N0',
             location: 'Hulu / Baseline',
 
-            ph: Number(
-              data?.N0?.latest?.ph ?? 0
-            ),
+            ph: data?.N0?.latest?.ph != null
+              ? Number(data.N0.latest.ph)
+              : null,
 
-            tds: Number(
-              data?.N0?.latest?.tds ?? 0
-            ),
+            tds: data?.N0?.latest?.tds != null
+              ? Number(data.N0.latest.tds)
+              : null,
 
-            turbidity: Number(
-              data?.N0?.latest?.turbidity ?? 0
-            ),
+            turbidity: data?.N0?.latest?.turbidity != null
+              ? Number(data.N0.latest.turbidity)
+              : null,
 
-            timestamp: Number(
-              data?.N0?.latest?.timestamp ?? 0
-            ),
+            timestamp: data?.N0?.latest?.timestamp != null
+              ? Number(data.N0.latest.timestamp)
+              : null,
 
-            lastSeen: Number(
-              data?.N0?.latest?.timestamp ?? 0
-            ),
+            lastSeen: data?.N0?.latest?.timestamp != null
+              ? Number(data.N0.latest.timestamp)
+              : null,
 
             rssi:
               data?.N0?.latest?.rssi != null
@@ -144,25 +154,25 @@ function App() {
             node: 'N1',
             location: 'Cabang Irigasi 1',
 
-            ph: Number(
-              data?.N1?.latest?.ph ?? 0
-            ),
+            ph: data?.N1?.latest?.ph != null
+              ? Number(data.N1.latest.ph)
+              : null,
 
-            tds: Number(
-              data?.N1?.latest?.tds ?? 0
-            ),
+            tds: data?.N1?.latest?.tds != null
+              ? Number(data.N1.latest.tds)
+              : null,
 
-            turbidity: Number(
-              data?.N1?.latest?.turbidity ?? 0
-            ),
+            turbidity: data?.N1?.latest?.turbidity != null
+              ? Number(data.N1.latest.turbidity)
+              : null,
 
-            timestamp: Number(
-              data?.N1?.latest?.timestamp ?? 0
-            ),
+            timestamp: data?.N1?.latest?.timestamp != null
+              ? Number(data.N1.latest.timestamp)
+              : null,
 
-            lastSeen: Number(
-              data?.N1?.latest?.timestamp ?? 0
-            ),
+            lastSeen: data?.N1?.latest?.timestamp != null
+              ? Number(data.N1.latest.timestamp)
+              : null,
 
             rssi:
               data?.N1?.latest?.rssi != null
@@ -183,25 +193,25 @@ function App() {
             node: 'N2',
             location: 'Cabang Irigasi 2',
 
-            ph: Number(
-              data?.N2?.latest?.ph ?? 0
-            ),
+            ph: data?.N2?.latest?.ph != null
+              ? Number(data.N2.latest.ph)
+              : null,
 
-            tds: Number(
-              data?.N2?.latest?.tds ?? 0
-            ),
+            tds: data?.N2?.latest?.tds != null
+              ? Number(data.N2.latest.tds)
+              : null,
 
-            turbidity: Number(
-              data?.N2?.latest?.turbidity ?? 0
-            ),
+            turbidity: data?.N2?.latest?.turbidity != null
+              ? Number(data.N2.latest.turbidity)
+              : null,
 
-            timestamp: Number(
-              data?.N2?.latest?.timestamp ?? 0
-            ),
+            timestamp: data?.N2?.latest?.timestamp != null
+              ? Number(data.N2.latest.timestamp)
+              : null,
 
-            lastSeen: Number(
-              data?.N2?.latest?.timestamp ?? 0
-            ),
+            lastSeen: data?.N2?.latest?.timestamp != null
+              ? Number(data.N2.latest.timestamp)
+              : null,
 
             rssi:
               data?.N2?.latest?.rssi != null
@@ -265,7 +275,9 @@ function App() {
     const historyRef = query(
       ref(database, `${DATA_ROOT}/history`),
       orderByKey(),
-      limitToLast(historyLimit)
+      // Ambil 1 record ekstra untuk mengecek
+      // apakah masih ada data yang lebih lama.
+      limitToLast(historyLimit + 1)
     )
 
 
@@ -283,13 +295,46 @@ function App() {
         if (!data) {
 
           setHistory([])
+          setHasMoreHistory(false)
 
           return
         }
 
 
-        const formattedHistory =
+        // Firebase diminta historyLimit + 1.
+        // Record ekstra hanya digunakan untuk mengecek
+        // apakah masih ada data yang lebih lama.
+        const historyEntries =
           Object.entries(data)
+            .sort(
+              ([timestampA], [timestampB]) =>
+                Number(timestampA)
+                - Number(timestampB)
+            )
+
+
+        const hasMore =
+          historyEntries.length
+          > historyLimit
+
+
+        setHasMoreHistory(
+          hasMore
+        )
+
+
+        // Record ekstra paling lama tidak perlu
+        // ditampilkan di tabel.
+        const visibleEntries =
+          hasMore
+            ? historyEntries.slice(
+                -historyLimit
+              )
+            : historyEntries
+
+
+        const formattedHistory =
+          visibleEntries
 
             .map(([timestamp, value]) => {
 
@@ -334,49 +379,49 @@ function App() {
                 // =====================
 
                 N0_ph:
-                  Number(
-                    value?.N0?.ph ?? 0
-                  ),
+                  value?.N0?.ph != null
+                  ? Number(value.N0.ph)
+                  : null,
 
                 N0_tds:
-                  Number(
-                    value?.N0?.tds ?? 0
-                  ),
+                  value?.N0?.tds != null
+                  ? Number(value.N0.tds)
+                  : null,
 
                 N0_turbidity:
-                  Number(
-                    value?.N0?.turbidity ?? 0
-                  ),
+                  value?.N0?.turbidity != null
+                  ? Number(value.N0.turbidity)
+                  : null,
 
                 N1_ph:
-                  Number(
-                    value?.N1?.ph ?? 0
-                  ),
+                  value?.N1?.ph != null
+                  ? Number(value.N1.ph)
+                  : null,
 
                 N1_tds:
-                  Number(
-                    value?.N1?.tds ?? 0
-                  ),
+                  value?.N1?.tds != null
+                  ? Number(value.N1.tds)
+                  : null,
 
                 N1_turbidity:
-                  Number(
-                    value?.N1?.turbidity ?? 0
-                  ),
+                  value?.N1?.turbidity != null
+                  ? Number(value.N1.turbidity)
+                  : null,
 
                 N2_ph:
-                  Number(
-                    value?.N2?.ph ?? 0
-                  ),
+                  value?.N2?.ph != null
+                  ? Number(value.N2.ph)
+                  : null,
 
                 N2_tds:
-                  Number(
-                    value?.N2?.tds ?? 0
-                  ),
+                  value?.N2?.tds != null
+                  ? Number(value.N2.tds)
+                  : null,
 
                 N2_turbidity:
-                  Number(
-                    value?.N2?.turbidity ?? 0
-                  ),
+                  value?.N2?.turbidity != null
+                  ? Number(value.N2.turbidity)
+                  : null,
 
 
                 // =====================
@@ -439,15 +484,38 @@ function App() {
       return 'Tidak Ada Data'
     }
 
+    const numericTimestamp =
+      Number(timestamp)
+
+    if (
+      !Number.isFinite(numericTimestamp)
+    ) {
+      return 'Waktu Tidak Valid'
+    }
+
     const difference =
-      currentTime - Number(timestamp)
+      currentTime - numericTimestamp
+
+    // Toleransi kecil untuk clock drift.
+    // Jika timestamp terlalu jauh di masa depan,
+    // jangan dianggap Online.
+    const futureTolerance =
+      60 * 1000
+
+    if (
+      difference < -futureTolerance
+    ) {
+      return 'Waktu Tidak Valid'
+    }
 
     // Batas sementara: 10 menit
     // Karena interval pengiriman direncanakan sekitar 5 menit.
     const offlineThreshold =
       10 * 60 * 1000
 
-    if (difference <= offlineThreshold) {
+    if (
+      difference <= offlineThreshold
+    ) {
       return 'Online'
     }
 
@@ -477,6 +545,131 @@ function App() {
         }
       }
     : null
+
+
+  // =========================================
+  // SINKRONISASI DATA SENSOR ↔ HASIL AI
+  // =========================================
+
+  const AI_PENDING_GRACE_MS =
+    30 * 1000
+
+  const latestHistoryTimestamp =
+    history.length > 0
+      ? Number(
+          history[
+            history.length - 1
+          ]?.timestamp
+        )
+      : null
+
+
+  useEffect(() => {
+
+    const latestTimestamp =
+      history.length > 0
+        ? Number(
+            history[
+              history.length - 1
+            ]?.timestamp
+          )
+        : null
+
+    const aiTimestamp =
+      analysis?.source_timestamp_ms != null
+        ? Number(
+            analysis.source_timestamp_ms
+          )
+        : null
+
+    const timestampsValid =
+      Number.isFinite(latestTimestamp)
+      && Number.isFinite(aiTimestamp)
+
+    if (
+      !timestampsValid
+      || latestTimestamp === aiTimestamp
+    ) {
+      setAnalysisMismatchSince(null)
+      return
+    }
+
+    // AI dan sensor mulai berbeda.
+    // Jangan reset timer ketika history baru terus masuk.
+    setAnalysisMismatchSince(
+      previous =>
+        previous ?? Date.now()
+    )
+
+  }, [
+    history,
+    analysis
+  ])
+
+
+  const getAnalysisSyncState = () => {
+
+    if (!analysis) {
+      return 'NO_ANALYSIS'
+    }
+
+    const aiTimestamp =
+      Number(
+        analysis.source_timestamp_ms
+      )
+
+    if (
+      !Number.isFinite(aiTimestamp)
+      || !Number.isFinite(
+        latestHistoryTimestamp
+      )
+    ) {
+      return 'UNKNOWN'
+    }
+
+    if (
+      aiTimestamp
+      === latestHistoryTimestamp
+    ) {
+      return 'SYNCED'
+    }
+
+    // Listener Firebase dapat tiba tidak berurutan.
+    // Jika analysis lebih baru dari history yang
+    // sedang tampil, beri waktu listener history
+    // untuk mengejar.
+    if (
+      aiTimestamp
+      > latestHistoryTimestamp
+    ) {
+      return 'PENDING'
+    }
+
+    // Hitung sudah berapa lama AI dan sensor
+    // berada dalam kondisi tidak sinkron.
+    if (
+      analysisMismatchSince == null
+    ) {
+      return 'PENDING'
+    }
+
+    const mismatchAge =
+      currentTime
+      - analysisMismatchSince
+
+    if (
+      mismatchAge
+      <= AI_PENDING_GRACE_MS
+    ) {
+      return 'PENDING'
+    }
+
+    return 'STALE'
+  }
+
+
+  const analysisSyncState =
+    getAnalysisSyncState()
 
 
 
@@ -765,6 +958,7 @@ function App() {
 
           <AnomalyPanel
             analysis={analysis}
+            syncState={analysisSyncState}
           />
 
         </section>
@@ -780,6 +974,7 @@ function App() {
           <HistoryExplorer
             data={history}
             historyLimit={historyLimit}
+            hasMoreHistory={hasMoreHistory}
 
             onLoadMore={() =>
               setHistoryLimit(

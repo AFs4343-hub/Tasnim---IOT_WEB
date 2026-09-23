@@ -21,6 +21,14 @@ DEFAULT_INTERVAL = 5
 # Simulator WAJIB menulis hanya ke area dummy.
 # Jangan pernah diarahkan ke /field.
 DATA_ROOT = "simulation"
+
+# Satu ID dibuat setiap kali proses simulator dimulai.
+# Semua record dari proses yang sama dianggap satu sesi.
+SIM_SESSION_ID = (
+    "SIM_"
+    + time.strftime("%Y%m%d_%H%M%S")
+)
+
 DATA_MODE = "SIMULATION"
 
 
@@ -211,6 +219,7 @@ def run_cycle(
     history_record = {
         "meta": {
             "data_source": "SIMULATION",
+            "session_id": SIM_SESSION_ID,
             "mode": (
                 f"ANOMALI_{anomaly_node}"
                 if anomaly_node
