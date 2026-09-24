@@ -11,6 +11,11 @@
     "field": {
       ".read": true,
       ".write": false
+    },
+
+    "hardware_test": {
+      ".read": "auth != null",
+      ".write": "auth != null"
     }
   }
 }
