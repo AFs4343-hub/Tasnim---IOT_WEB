@@ -42,3 +42,7 @@ ai/outputs/*.csv
 
 # Firebase Admin credential
 iot/serviceAccountKey.json
+
+# ESP32 hardware credentials
+secrets.h
+iot/esp32/**/secrets.h
