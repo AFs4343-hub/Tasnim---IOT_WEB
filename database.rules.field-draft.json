@@ -14,11 +14,13 @@
     },
 
     "field": {
+
       "nodes": {
         ".read": true,
 
         "$node": {
           "latest": {
+
             ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
 
             ".validate": "newData.hasChildren(['ph', 'tds', 'timestamp'])",
@@ -45,6 +47,10 @@
 
             "rssi": {
               ".validate": "newData.isNumber()"
+            },
+
+            "$other": {
+              ".validate": false
             }
           }
         }
@@ -54,7 +60,9 @@
         ".read": true,
 
         "$slot": {
+
           "$node": {
+
             ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
 
             ".validate": "newData.hasChildren(['ph', 'tds', 'timestamp'])",
@@ -81,6 +89,10 @@
 
             "rssi": {
               ".validate": "newData.isNumber()"
+            },
+
+            "$other": {
+              ".validate": false
             }
           }
         }
@@ -95,7 +107,9 @@
         ".read": "auth != null",
 
         "$node": {
+
           "location": {
+
             ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
 
             ".validate": "newData.hasChildren(['latitude', 'longitude'])",
@@ -118,44 +132,10 @@
 
             "hdop": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
-            }
-          }
-        }
-      },
-
-      "system": {
-        "nodes": {
-          ".read": true,
-
-          "$node": {
-            ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
-
-            "last_seen": {
-              ".validate": "newData.isNumber() && newData.val() > 0"
             },
 
-            "time_source": {
-              ".validate": "newData.isString()"
-            },
-
-            "rtc_ok": {
-              ".validate": "newData.isBoolean()"
-            },
-
-            "gps_ok": {
-              ".validate": "newData.isBoolean()"
-            },
-
-            "sd_ok": {
-              ".validate": "newData.isBoolean()"
-            },
-
-            "wifi_rssi": {
-              ".validate": "newData.isNumber()"
-            },
-
-            "firmware_version": {
-              ".validate": "newData.isString()"
+            "$other": {
+              ".validate": false
             }
           }
         }
