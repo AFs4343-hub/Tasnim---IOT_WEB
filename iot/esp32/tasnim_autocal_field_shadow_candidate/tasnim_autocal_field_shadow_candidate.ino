@@ -1,4 +1,4 @@
-'aq1/*
+/*
   ======================================================
    PROYEK : MONITORING KUALITAS AIR (ESP32) + FIREBASE
    Sensor : - Modul pH (PH-4502C)
