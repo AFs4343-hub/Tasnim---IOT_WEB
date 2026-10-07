@@ -564,6 +564,354 @@ function App() {
       : null
 
 
+  // =========================================
+  // KELENGKAPAN DATA SLOT TERBARU
+  // =========================================
+
+  const latestHistoryRecord =
+    history.length > 0
+      ? history[
+          history.length - 1
+        ]
+      : null
+
+
+  // =========================================
+  // DATA QUALITY ENGINE
+  //
+  // Menentukan apakah satu slot history layak
+  // dianalisis AI.
+  //
+  // critical:
+  //   masalah yang membuat AI HARUS skip.
+  //
+  // warnings:
+  //   masalah telemetri/non-sensor yang tidak
+  //   membatalkan analisis kualitas air.
+  // =========================================
+
+  const isMissingValue = (
+    value
+  ) => {
+
+    return (
+      value === null
+      || value === undefined
+      || value === ''
+    )
+
+  }
+
+
+  const toFiniteNumber = (
+    value
+  ) => {
+
+    if (isMissingValue(value)) {
+      return null
+    }
+
+    const numeric =
+      Number(value)
+
+    return Number.isFinite(numeric)
+      ? numeric
+      : null
+
+  }
+
+
+  const isSensorValueValid = (
+    parameter,
+    value
+  ) => {
+
+    const numeric =
+      toFiniteNumber(value)
+
+    if (numeric === null) {
+      return false
+    }
+
+
+    // Validasi dasar sesuai kontrak data TASNIM.
+    // BUKAN threshold kualitas air/anomali.
+    if (parameter === 'ph') {
+
+      return (
+        numeric >= 0
+        && numeric <= 14
+      )
+
+    }
+
+
+    if (
+      parameter === 'tds'
+      || parameter === 'turbidity'
+    ) {
+
+      return numeric >= 0
+
+    }
+
+
+    return false
+
+  }
+
+
+  const getDataQuality = (
+    record
+  ) => {
+
+    const critical = []
+    const warnings = []
+
+
+    // -----------------------------------------
+    // SLOT / TIMESTAMP
+    // -----------------------------------------
+
+    if (!record) {
+
+      return {
+        analyzable: false,
+        status: 'NO_DATA',
+        critical: [
+          {
+            node: null,
+            component: 'record',
+            reason: 'MISSING'
+          }
+        ],
+        warnings: []
+      }
+
+    }
+
+
+    const slotTimestamp =
+      toFiniteNumber(
+        record.timestamp
+      )
+
+
+    if (
+      slotTimestamp === null
+      || slotTimestamp <= 0
+    ) {
+
+      critical.push({
+        node: null,
+        component: 'timestamp',
+        reason: 'INVALID_TIME'
+      })
+
+    }
+
+
+    // -----------------------------------------
+    // NODE + SENSOR
+    // -----------------------------------------
+
+    for (
+      const node of ['N0', 'N1', 'N2']
+    ) {
+
+      const nodeData =
+        record?.[node]
+
+
+      if (!nodeData) {
+
+        critical.push({
+          node,
+          component: 'node',
+          reason: 'NODE_MISSING'
+        })
+
+        continue
+
+      }
+
+
+      for (
+        const parameter
+        of ['ph', 'tds', 'turbidity']
+      ) {
+
+        const value =
+          nodeData?.[parameter]
+
+
+        if (
+          isMissingValue(value)
+        ) {
+
+          critical.push({
+            node,
+            component: parameter,
+            reason: 'SENSOR_MISSING'
+          })
+
+          continue
+
+        }
+
+
+        if (
+          !isSensorValueValid(
+            parameter,
+            value
+          )
+        ) {
+
+          critical.push({
+            node,
+            component: parameter,
+            reason: 'INVALID_SENSOR'
+          })
+
+        }
+
+      }
+
+
+      // ---------------------------------------
+      // TELEMETRY
+      // Tidak menghentikan AI.
+      // ---------------------------------------
+
+      if (
+        isMissingValue(
+          nodeData.rssi
+        )
+        || toFiniteNumber(
+          nodeData.rssi
+        ) === null
+      ) {
+
+        warnings.push({
+          node,
+          component: 'rssi',
+          reason: 'TELEMETRY_MISSING'
+        })
+
+      }
+
+
+      if (
+        isMissingValue(
+          nodeData.sequence
+        )
+        || toFiniteNumber(
+          nodeData.sequence
+        ) === null
+      ) {
+
+        warnings.push({
+          node,
+          component: 'sequence',
+          reason: 'TELEMETRY_MISSING'
+        })
+
+      }
+
+    }
+
+
+    // -----------------------------------------
+    // STATUS UTAMA
+    // -----------------------------------------
+
+    let status =
+      'COMPLETE'
+
+
+    if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'INVALID_TIME'
+      )
+    ) {
+
+      status =
+        'INVALID_TIME'
+
+    } else if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'NODE_MISSING'
+      )
+    ) {
+
+      status =
+        'NODE_MISSING'
+
+    } else if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'SENSOR_MISSING'
+      )
+    ) {
+
+      status =
+        'SENSOR_MISSING'
+
+    } else if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'INVALID_SENSOR'
+      )
+    ) {
+
+      status =
+        'INVALID_SENSOR'
+
+    }
+
+
+    return {
+      analyzable:
+        critical.length === 0,
+
+      status,
+
+      critical,
+      warnings
+    }
+
+  }
+
+
+  const latestDataQuality =
+    getDataQuality(
+      latestHistoryRecord
+    )
+
+
+  // Compatibility sementara untuk UI lama.
+  // Bisa dihapus setelah seluruh komponen
+  // menggunakan latestDataQuality langsung.
+  const latestCompleteness = {
+
+    complete:
+      latestDataQuality.analyzable,
+
+    missing:
+      latestDataQuality.critical.map(
+        issue =>
+          `${issue.node ?? 'SYSTEM'}:${issue.component}`
+      )
+
+  }
+
+
   useEffect(() => {
 
     const latestTimestamp =
@@ -574,6 +922,26 @@ function App() {
             ]?.timestamp
           )
         : null
+
+    const dataQuality =
+      getDataQuality(
+        latestHistoryRecord
+      )
+
+
+    // Slot yang tidak layak dianalisis memang
+    // sengaja dilewati AI.
+    // Jangan dianggap sebagai AI mismatch/stale.
+    if (!dataQuality.analyzable) {
+
+      setAnalysisMismatchSince(
+        null
+      )
+
+      return
+
+    }
+
 
     const aiTimestamp =
       analysis?.source_timestamp_ms != null
@@ -608,6 +976,18 @@ function App() {
 
 
   const getAnalysisSyncState = () => {
+
+    if (!latestHistoryRecord) {
+      return 'NO_HISTORY'
+    }
+
+
+    if (
+      !latestDataQuality.analyzable
+    ) {
+      return 'INCOMPLETE_DATA'
+    }
+
 
     if (!analysis) {
       return 'NO_ANALYSIS'
@@ -959,6 +1339,7 @@ function App() {
           <AnomalyPanel
             analysis={analysis}
             syncState={analysisSyncState}
+            dataQuality={latestDataQuality}
           />
 
         </section>
