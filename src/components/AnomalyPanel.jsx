@@ -269,6 +269,47 @@ function AnomalyPanel({
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
 
+      {/* TASNIM_AI_NOTICE_V1 */}
+
+      {analysis?.model_stage === 'PROTOTYPE_SIMULATION'
+        && ['REAL_TEST', 'FIELD'].includes(analysis?.data_source)
+        && (
+          <p className="mb-4 text-xs font-semibold text-amber-300">
+            MODEL PROTOTIPE — BELUM TERVALIDASI LAPANGAN
+          </p>
+        )}
+
+      {isSynced && (
+        (analysis?.status === 'NORMAL'
+          && analysis?.isolation_forest?.is_anomaly === true)
+        ||
+        (analysis?.status === 'ANOMALI'
+          && analysis?.isolation_forest?.is_anomaly === false)
+      ) && (
+        <div
+          role="alert"
+          className="mb-5 rounded-xl border border-amber-700 p-4"
+        >
+          <p className="font-semibold text-amber-300">
+            HASIL MODEL BERBEDA
+          </p>
+          <p className="mt-2 text-sm text-slate-300">
+            Random Forest: {analysis.status}.
+            {' '}Isolation Forest:
+            {' '}
+            {analysis.isolation_forest.is_anomaly
+              ? 'mendeteksi anomali'
+              : 'tidak mendeteksi anomali'}.
+          </p>
+          <p className="mt-2 text-xs text-slate-400">
+            Status utama mengikuti Random Forest.
+            Perbedaan hasil perlu ditinjau sebelum
+            mengambil kesimpulan kualitas air.
+          </p>
+        </div>
+      )}
+
+
       {/* HEADER */}
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
