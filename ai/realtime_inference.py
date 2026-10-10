@@ -10,6 +10,7 @@ import pandas as pd
 from firebase_admin import credentials, db
 
 from ai.predict import predict_latest
+from ai.check_ai_readiness import audit_slot
 
 
 DATABASE_URL = (
@@ -166,6 +167,18 @@ def load_recent_history(
             source_timestamp = int(key)
         except (TypeError, ValueError):
             continue
+
+        # Validasi sensor dan kualitas paket sebelum AI.
+        # SIMULATION tetap memakai perilaku sebelumnya.
+        if DATA_ROOT in ("real_test", "field"):
+            reasons = audit_slot(key, slot)
+
+            if reasons:
+                print(
+                    f"[AI GATE SKIP] {DATA_ROOT}/{key}: "
+                    + "; ".join(reasons)
+                )
+                continue
 
         # Untuk analisis spasial, satu slot harus
         # memiliki N0, N1, dan N2.
@@ -402,25 +415,17 @@ def process_pending_record(
         time.time() * 1000
     )
 
-    result[
-        "model_stage"
-    ] = (
-        "PROTOTYPE_SIMULATION"
-        if DATA_ROOT == "simulation"
-        else "FIELD_INFERENCE"
-    )
+    result["model_stage"] = "PROTOTYPE_SIMULATION"
 
     result[
         "model_version"
     ] = "prototype-v1"
 
-    result[
-        "data_source"
-    ] = (
-        "SIMULATION"
-        if DATA_ROOT == "simulation"
-        else "FIELD"
-    )
+    result["data_source"] = {
+        "simulation": "SIMULATION",
+        "real_test": "REAL_TEST",
+        "field": "FIELD",
+    }.get(DATA_ROOT, DATA_ROOT.upper())
 
     result[
         "time_mode"
