@@ -2,143 +2,119 @@
   "rules": {
     ".read": false,
     ".write": false,
-
     "simulation": {
       ".read": true,
       ".write": false
     },
-
     "hardware_test": {
       ".read": "auth != null",
       ".write": "auth != null"
     },
-
     "field": {
-
       "nodes": {
         ".read": true,
-
         "$node": {
           "latest": {
-
             ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
-
             ".validate": "newData.hasChildren(['ph', 'tds', 'timestamp'])",
-
             "ph": {
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 14"
             },
-
             "tds": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "turbidity": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "timestamp": {
               ".validate": "newData.isNumber() && newData.val() > 0"
             },
-
             "sequence": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "rssi": {
               ".validate": "newData.isNumber()"
             },
-
             "$other": {
               ".validate": false
             }
           }
         }
       },
-
       "history": {
         ".read": true,
-
         "$slot": {
-
           "$node": {
-
             ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
-
             ".validate": "newData.hasChildren(['ph', 'tds', 'timestamp'])",
-
             "ph": {
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 14"
             },
-
             "tds": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "turbidity": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "timestamp": {
               ".validate": "newData.isNumber() && newData.val() > 0"
             },
-
             "sequence": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "rssi": {
               ".validate": "newData.isNumber()"
             },
-
             "$other": {
               ".validate": false
             }
           }
         }
       },
-
       "analysis": {
         ".read": true,
         ".write": false
       },
-
       "metadata": {
         ".read": "auth != null",
-
         "$node": {
-
           "location": {
-
             ".write": "auth != null && ($node === 'N0' || $node === 'N1' || $node === 'N2')",
-
             ".validate": "newData.hasChildren(['latitude', 'longitude'])",
-
             "latitude": {
               ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
             },
-
             "longitude": {
               ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
             },
-
             "captured_timestamp": {
               ".validate": "newData.isNumber() && newData.val() > 0"
             },
-
             "satellites": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "hdop": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             },
-
             "$other": {
               ".validate": false
             }
           }
         }
+      }
+    },
+    "real_test": {
+      "nodes": {
+        ".read": true,
+        ".write": false
+      },
+      "history": {
+        ".read": true,
+        ".write": false
+      },
+      "analysis": {
+        ".read": true,
+        ".write": false
       }
     }
   }
