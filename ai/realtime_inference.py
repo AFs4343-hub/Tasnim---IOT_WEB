@@ -36,6 +36,7 @@ with CONFIG_PATH.open() as config_file:
 
 DATA_ROOT = TASNIM_CONFIG["activeDataRoot"]
 DATA_MODE = TASNIM_CONFIG["mode"]
+DRY_RUN = False
 
 # Model prototype dilatih dari data simulasi
 # dengan interval pengukuran 5 menit.
@@ -432,20 +433,23 @@ def process_pending_record(
     ] = time_mode
 
 
-    # Arsip analisis pada timestamp yang tepat.
-    db.reference(
-        f"{DATA_ROOT}/history/"
-        f"{target_timestamp}/analysis"
-    ).set(result)
-
-
-    # /analysis/latest hanya boleh diperbarui jika
-    # record yang sedang diproses memang data terbaru.
-    if write_latest:
-
+    if DRY_RUN:
+        print("[DRY-RUN] Prediksi tidak ditulis ke Firebase")
+    else:
+        # Arsip analisis pada timestamp yang tepat.
         db.reference(
-            f"{DATA_ROOT}/analysis/latest"
+            f"{DATA_ROOT}/history/"
+            f"{target_timestamp}/analysis"
         ).set(result)
+
+
+        # /analysis/latest hanya boleh diperbarui jika
+        # record yang sedang diproses memang data terbaru.
+        if write_latest:
+
+            db.reference(
+                f"{DATA_ROOT}/analysis/latest"
+            ).set(result)
 
 
     rf = result[
@@ -488,7 +492,8 @@ def process_pending_record(
         f"{result['dominant_zscore']['zscore']:.2f}"
     )
     print(
-        "✓ Analysis saved"
+        "✓ Dry-run selesai (tidak disimpan)"
+        if DRY_RUN else "✓ Analysis saved"
     )
 
 
@@ -602,6 +607,8 @@ def recover_full_backlog(
 
 def main():
 
+    global DATA_ROOT, DATA_MODE, DRY_RUN
+
     parser = argparse.ArgumentParser(
         description=(
             "Realtime AI inference TASNIM"
@@ -617,7 +624,32 @@ def main():
         )
     )
 
+    parser.add_argument(
+        "--root",
+        choices=("simulation", "real_test"),
+        default=None,
+        help="Pilih data root tanpa mengubah tasnim.config.json",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Jalankan analisis tanpa Firebase write",
+    )
+
     args = parser.parse_args()
+
+    # TASNIM_AI_CLI_V1
+    if args.root is not None:
+        DATA_ROOT = args.root
+        DATA_MODE = args.root.upper()
+
+    DRY_RUN = args.dry_run
+
+    print(
+        f"[MODE] root={DATA_ROOT} | "
+        f"dry_run={DRY_RUN}"
+    )
 
 
     print()
