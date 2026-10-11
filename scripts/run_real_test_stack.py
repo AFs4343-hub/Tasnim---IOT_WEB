@@ -21,7 +21,32 @@ def main():
         action="store_true",
         help="Jalankan Bridge dan AI bersama sampai Ctrl+C",
     )
+    parser.add_argument(
+        "--write-real-test",
+        action="store_true",
+        help="Aktifkan penulisan ke REAL_TEST saja",
+    )
+    parser.add_argument(
+        "--confirm-write",
+        default=None,
+        metavar="PHRASE",
+        help="Konfirmasi eksplisit REAL_TEST_ONLY",
+    )
+
     args = parser.parse_args()
+
+    # TASNIM_REAL_TEST_WRITE_GATE_V1
+    if args.write_real_test:
+        if args.confirm_write != "REAL_TEST_ONLY":
+            parser.error(
+                "WRITE ditolak: gunakan "
+                "--confirm-write REAL_TEST_ONLY"
+            )
+    elif args.confirm_write is not None:
+        parser.error(
+            "--confirm-write hanya boleh bersama "
+            "--write-real-test"
+        )
 
     config_path = ROOT / "tasnim.config.json"
     config = json.loads(config_path.read_text())
@@ -53,14 +78,23 @@ def main():
         sys.executable, "-u", "-m",
         "ai.realtime_inference",
         "--root", "real_test",
-        "--dry-run",
     ]
 
+    if args.write_real_test:
+        bridge.append("--write")
+    else:
+        ai.append("--dry-run")
+
     print("=== TASNIM REAL_TEST STACK ===", flush=True)
-    print("[SAFE] Bridge READ ONLY", flush=True)
-    print("[SAFE] AI DRY-RUN", flush=True)
+    if args.write_real_test:
+        print("[WRITE] REAL_TEST ONLY — EXPLICIT OPT-IN", flush=True)
+        print("[WRITE] Bridge dan AI boleh menulis REAL_TEST", flush=True)
+    else:
+        print("[SAFE] Bridge READ ONLY", flush=True)
+        print("[SAFE] AI DRY-RUN", flush=True)
+        print("[SAFE] Tidak ada Firebase write", flush=True)
+
     print("[SAFE] SIMULATION config tetap", flush=True)
-    print("[SAFE] Tidak ada Firebase write", flush=True)
 
     if not args.continuous:
         subprocess.run(
@@ -79,18 +113,22 @@ def main():
     children = []
 
     try:
-        children = [
+        # Simpan setiap proses segera agar finally tetap
+        # dapat membersihkan proses pertama jika proses kedua gagal.
+        children.append(
             subprocess.Popen(
                 bridge + ["--interval", "15"],
                 cwd=ROOT,
                 start_new_session=True,
-            ),
+            )
+        )
+        children.append(
             subprocess.Popen(
                 ai,
                 cwd=ROOT,
                 start_new_session=True,
-            ),
-        ]
+            )
+        )
 
         print("[RUNNING] Bridge + AI aktif", flush=True)
 
