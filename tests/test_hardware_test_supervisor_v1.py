@@ -36,6 +36,9 @@ class SupervisorFakeDB(LeaseFakeDB):
 
             def transaction(self, update):
                 with parent.lock:
+                    if parent.fail_once_path == path:
+                        parent.fail_once_path = None
+                        raise ConnectionError("injected reporting transaction failure")
                     old = copy.deepcopy(parent.values.get(path))
                     new = update(old)
                     parent.values[path] = copy.deepcopy(new)
