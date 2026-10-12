@@ -96,12 +96,20 @@ export function analysisStatus(analysis, rows) {
     return { state: 'NO_ANALYSIS', analysis: null }
   }
   if (analysis.data_source !== 'HARDWARE_TEST'
-      || analysis.model_stage !== 'PROTOTYPE_SIMULATION') {
+      || analysis.model_stage !== 'PROTOTYPE_SIMULATION'
+      || typeof analysis.model_version !== 'string'
+      || !analysis.model_version.trim()
+      || typeof analysis.session_id !== 'string'
+      || !analysis.session_id.trim()
+      || !['NORMAL', 'ANOMALI'].includes(analysis.status)
+      || typeof analysis.model_disagreement !== 'boolean') {
     return { state: 'UNTRUSTED_ANALYSIS', analysis: null }
   }
   const last = rows[rows.length - 1]
   const matches = last?.complete && last.slot === analysis.source_timestamp_ms
-  return { state: matches ? 'MATCHED_PROTOTYPE' : 'STALE_OR_INCOMPLETE',
+  // This only establishes timestamp alignment. The browser does not verify
+  // worker source_digest_sha256 or the provenance of a model decision.
+  return { state: matches ? 'SLOT_ALIGNED_UNVERIFIED' : 'STALE_OR_INCOMPLETE',
     analysis }
 }
 

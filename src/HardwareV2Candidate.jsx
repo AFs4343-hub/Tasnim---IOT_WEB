@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  getAuth, getIdTokenResult, onAuthStateChanged,
+  getAuth, getIdTokenResult, onIdTokenChanged,
   signInWithEmailAndPassword, signOut,
 } from 'firebase/auth'
 import { ref, onValue, query, orderByKey, limitToLast } from 'firebase/database'
@@ -149,7 +149,7 @@ function HardwarePanel({ role, onSignOut }) {
               Model PROTOTYPE_SIMULATION — belum tervalidasi ilmiah dengan data lapangan.
             </p>
             <p className="mt-2 text-sm text-slate-300">
-              {checkedAI.state === 'MATCHED_PROTOTYPE' ? 'Slot hasil AI cocok dengan history lengkap yang sedang terlihat.'
+              {checkedAI.state === 'SLOT_ALIGNED_UNVERIFIED' ? 'Waktu hasil AI cocok dengan history lengkap, tetapi kecocokan isi sumber belum diverifikasi browser.'
                 : checkedAI.state === 'STALE_OR_INCOMPLETE' ? 'Hasil AI tidak sinkron atau history terakhir belum lengkap.'
                   : checkedAI.state === 'UNTRUSTED_ANALYSIS' ? 'Metadata analisis belum cocok dengan kontrak V2.'
                     : 'Belum ada hasil analisis yang dapat dibaca.'}
@@ -211,24 +211,39 @@ export default function HardwareV2Candidate() {
 
   useEffect(() => {
     let active = true
-    const unsubscribe = onAuthStateChanged(auth, async user => {
+    let requestVersion = 0
+    let forceFirstUserRefresh = true
+    // Unlike onAuthStateChanged, this also rechecks claims when Firebase
+    // refreshes an existing user's ID token. Database Rules remain the
+    // authoritative enforcement boundary.
+    const unsubscribe = onIdTokenChanged(auth, async user => {
+      const version = ++requestVersion
+      if (!active) return
       setAccess({ state: 'checking', role: null })
       if (!user) {
-        if (active) setAccess({ state: 'signed-out', role: null })
+        setAccess({ state: 'signed-out', role: null })
         return
       }
       try {
-        // Force a fresh token when entering candidate view: do not trust
-        // a cached role that may have been revoked.
-        const result = await getIdTokenResult(user, true)
-        if (!active || auth.currentUser?.uid !== user.uid) return
+        // Force only the first signed-in check: forcing on EVERY token
+        // change would cause a self-triggered token refresh loop.
+        const forceRefresh = forceFirstUserRefresh
+        forceFirstUserRefresh = false
+        const result = await getIdTokenResult(user, forceRefresh)
+        if (!active || version !== requestVersion || auth.currentUser?.uid !== user.uid) return
         const role = getRoleFromClaims(result.claims)
         setAccess({ state: role ? 'ready' : 'forbidden', role })
       } catch {
-        if (active) setAccess({ state: 'error', role: null })
+        if (active && version === requestVersion) {
+          setAccess({ state: 'error', role: null })
+        }
       }
     })
-    return () => { active = false; unsubscribe() }
+    return () => {
+      active = false
+      requestVersion++
+      unsubscribe()
+    }
   }, [])
 
   const handleSignIn = async (email, password) => {

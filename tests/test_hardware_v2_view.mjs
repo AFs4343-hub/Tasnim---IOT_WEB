@@ -74,11 +74,26 @@ test('only matching, structurally complete latest slot can claim AI sync', () =>
   const analysis = {
     source_timestamp_ms: slot, data_source: 'HARDWARE_TEST',
     model_stage: 'PROTOTYPE_SIMULATION', status: 'NORMAL',
+    model_version: 'prototype-v1', session_id: 'DEMO_TEST',
+    model_disagreement: false,
   }
-  assert.equal(analysisStatus(analysis, rows).state, 'MATCHED_PROTOTYPE')
+  assert.equal(analysisStatus(analysis, rows).state, 'SLOT_ALIGNED_UNVERIFIED')
   assert.equal(analysisStatus({ ...analysis, source_timestamp_ms: slot + 300000 }, rows).state, 'STALE_OR_INCOMPLETE')
   assert.equal(analysisStatus({ ...analysis, model_stage: 'FIELD_VALIDATED' }, rows).state, 'UNTRUSTED_ANALYSIS')
   assert.equal(analysisStatus(analysis, historyRows({ [slot]: record({ N2: null }) })).state, 'STALE_OR_INCOMPLETE')
+})
+
+test('AI result with missing version/session or invalid disagreement is never shown as verified', () => {
+  const rows = historyRows({ [slot]: record() })
+  const valid = {
+    source_timestamp_ms: slot, data_source: 'HARDWARE_TEST',
+    model_stage: 'PROTOTYPE_SIMULATION', status: 'NORMAL',
+    model_version: 'v1', session_id: 'S1', model_disagreement: false,
+  }
+  assert.equal(analysisStatus({ ...valid, model_version: '' }, rows).state, 'UNTRUSTED_ANALYSIS')
+  assert.equal(analysisStatus({ ...valid, session_id: '' }, rows).state, 'UNTRUSTED_ANALYSIS')
+  assert.equal(analysisStatus({ ...valid, model_disagreement: 'false' }, rows).state, 'UNTRUSTED_ANALYSIS')
+  assert.equal(analysisStatus({ ...valid, status: 'OTHER' }, rows).state, 'UNTRUSTED_ANALYSIS')
 })
 
 test('latest node converter never imports an analysis record as a sensor', () => {

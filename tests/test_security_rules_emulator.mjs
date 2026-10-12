@@ -8,7 +8,10 @@ import {
 import {
   ref,
   get,
-  set
+  set,
+  query,
+  orderByKey,
+  limitToLast
 } from 'firebase/database';
 
 import { readFileSync } from 'node:fs';
@@ -172,7 +175,47 @@ try {
     }))
   );
 
-  console.log(`\n[PASS] ${passed}/20 emulator authorization tests`);
+  // Match actual paths/queries issued by HardwareV2Candidate.jsx.
+  await check('Viewer can read node collection for hardware preview', () =>
+    assertSucceeds(get(ref(viewer, 'hardware_test/nodes')))
+  );
+
+  await check('Manager can read bounded hardware history query', () =>
+    assertSucceeds(get(query(ref(manager, 'hardware_test/history'),
+      orderByKey(), limitToLast(61))))
+  );
+
+  await check('Admin can read latest AI on preview', () =>
+    assertSucceeds(get(ref(admin, 'hardware_test/analysis/latest')))
+  );
+
+  await check('Anonymous cannot read hardware node collection', () =>
+    assertFails(get(ref(anonymous, 'hardware_test/nodes')))
+  );
+
+  await check('Unknown account cannot query hardware history', () =>
+    assertFails(get(query(ref(unknown, 'hardware_test/history'),
+      orderByKey(), limitToLast(61))))
+  );
+
+  await check('Device cannot read AI result through browser', () =>
+    assertFails(get(ref(device, 'hardware_test/analysis/latest')))
+  );
+
+  const fakeAdmin = env.authenticatedContext('looks-like-admin', {
+    tasnim_role: 'Admin'
+  }).database();
+  await check('Incorrectly cased role does not bypass Rules', () =>
+    assertFails(get(ref(fakeAdmin, 'hardware_test/nodes')))
+  );
+
+  await check('Viewer cannot write AI analysis in history', () =>
+    assertFails(set(ref(viewer, 'hardware_test/history/1791724500000/analysis'), {
+      status: 'ANOMALI'
+    }))
+  );
+
+  console.log(`\n[PASS] ${passed}/${passed} emulator authorization tests`);
   console.log('[INFO] Backend Admin SDK bypass is NOT tested here.');
   console.log('[INFO] ESP32 ingestion is NOT enabled by candidate Rules.');
 

@@ -26,6 +26,10 @@ The candidate view prompts for an account in Firebase Authentication.
 After a fresh token check, the account must have a custom claim
 `tasnim_role` equal to `admin`, `manager`, or `viewer`. Missing or
 unexpected claims cause a fail-closed screen without any hardware listeners.
+The app also watches Firebase ID-token changes, so refreshed roles are
+rechecked and stale asynchronous checks cannot unlock a later session.
+The first signed-in token is force-refreshed only once; subsequent refresh
+events are checked without recursively forcing another refresh.
 Assign roles **only from an authorized trusted backend** (never browser JS).
 The UI role check is usability defense, not the security boundary: actual
 Firebase Rules must enforce claims on the database side. The candidate
@@ -48,10 +52,15 @@ rather than silently falling back to simulation or claiming healthy telemetry.
   as '—', not faked as zero.
 - Require exact N0/N1/N2 contract metadata to display measurements.
 - Mark AI as prototype only, with an explicit status when its slot is stale,
-  missing or the three-node history is incomplete.
+  missing or the three-node history is incomplete. A matching timestamp
+  proves only **time alignment**, not a source digest verification.
+- Treat missing model version, session ID, valid status, or model disagreement
+  metadata as an untrusted AI record rather than presenting a green status.
 - Completeness is *structural*. It is not sensor calibration proof.
 - The candidate uses a bounded recent-history window (60–240 records) and
   is not a full historical exporter or observation-session manager.
+- Real browser login and token refresh with an actual Firebase Auth user
+  still require a separate Auth Emulator/authorized staging acceptance test.
 - Browser auth login, role provisioning, and Rules deployment remain
   unapproved; no physical ESP32 validation is claimed.
 
