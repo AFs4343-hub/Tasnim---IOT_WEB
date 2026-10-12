@@ -83,7 +83,7 @@ class HardwareTestHistoryPlannerTests(unittest.TestCase):
 
     def test_processed_analysis_is_not_pending(self):
         h = {str(SLOT0): slot(SLOT0), str(SLOT0+INTERVAL): slot(SLOT0+INTERVAL)}
-        h[str(SLOT0+INTERVAL]["analysis"] = {"status": "NORMAL"}
+        h[str(SLOT0+INTERVAL)]["analysis"] = {"status": "NORMAL"}
         p = self.plan(h)
         self.assertEqual(p["pending_timestamps"], [])
         self.assertEqual(len(p["rows"]), 2)
