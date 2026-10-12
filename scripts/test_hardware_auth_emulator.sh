@@ -30,5 +30,6 @@ python3 -m unittest discover -s tests -p 'test_hardware_test_supervisor_emulator
 # The full-stack pipeline must run AFTER suites that reset /hardware_test;
 # its final state is then examined via a real authenticated Vite browser.
 python3 -m unittest discover -s tests -p 'test_candidate_backup_restore_emulator.py' -v
+python3 -m unittest discover -s tests -p 'test_field_legacy_history_emulator.py' -v
 python3 -m unittest discover -s tests -p 'test_full_stack_candidate_emulator.py' -v
 node --test tests/test_full_stack_browser_emulator.mjs

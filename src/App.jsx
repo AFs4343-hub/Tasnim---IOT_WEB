@@ -11,6 +11,7 @@ import {
 import { database } from './services/firebase'
 import tasnimConfig from '../tasnim.config.json'
 import { adaptEmulatorForLegacyDashboard } from './services/demoLegacyAdapter.js'
+import { formatFieldLatestNodes, fieldHistoryRows } from './services/fieldHardwarePreview.js'
 import IoTPerformancePanel from './components/IoTPerformancePanel'
 import TrendChart from './components/TrendChart'
 import NodeCard from './components/NodeCard'
@@ -24,7 +25,11 @@ import SystemOverview from './components/SystemOverview'
 import ConnectionStateBanner from './components/ConnectionStateBanner'
 
 
-const DATA_ROOT = tasnimConfig.activeDataRoot
+// Explicit opt-in, development-only read of the field Firebase hardware_test
+// root. Production build and default dashboard remain on SIMULATION.
+const FIELD_PREVIEW = import.meta.env.DEV &&
+  import.meta.env.VITE_TASNIM_FIELD_PREVIEW === 'YES'
+const DATA_ROOT = FIELD_PREVIEW ? 'hardware_test' : tasnimConfig.activeDataRoot
 
 function App({ demoSnapshot } = {}) {
 
@@ -246,7 +251,7 @@ function App({ demoSnapshot } = {}) {
         }
 
 
-        setNodes(formattedNodes)
+        setNodes(FIELD_PREVIEW ? formatFieldLatestNodes(data) : formattedNodes)
 
         setFirebaseStatus('online')
 
@@ -462,7 +467,7 @@ function App({ demoSnapshot } = {}) {
             )
 
 
-        setHistory(formattedHistory)
+        setHistory(FIELD_PREVIEW ? fieldHistoryRows(data, historyLimit) : formattedHistory)
 
 
         console.log(
@@ -1122,6 +1127,15 @@ function App({ demoSnapshot } = {}) {
         {/* =================================
             HEADER
         ================================= */}
+
+        {FIELD_PREVIEW && demoSnapshot === undefined && <div role="status"
+          className="mb-5 rounded-xl border border-amber-600/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-100">
+          MODE PRATINJAU ALAT ASLI — membaca Firebase <code>hardware_test</code> saja.
+          Data sensor belum tervalidasi ilmiah. Grafik dan History hanya menampilkan
+          rekaman yang benar-benar tersimpan di <code>hardware_test/history</code>.
+          Jika kosong, belum ada histori; pembacaan <code>latest</code> tidak dibuat
+          menjadi histori palsu. Mode ini tidak menulis Firebase.
+        </div>}
 
         <header className="mb-7 sm:mb-10">
 

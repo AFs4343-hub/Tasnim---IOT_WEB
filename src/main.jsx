@@ -13,6 +13,9 @@ const demoEnabled = import.meta.env.DEV && candidateEnabled
   && import.meta.env.VITE_TASNIM_DEMO_LOGIN === 'YES'
 const HardwareV2Candidate = lazy(() => import('./HardwareV2Candidate.jsx'))
 const DemoHardwareV2 = lazy(() => import('./DemoHardwareV2.jsx'))
+const fieldEnabled = import.meta.env.DEV
+  && import.meta.env.VITE_TASNIM_FIELD_PREVIEW === 'YES'
+const FieldHardwarePreview = lazy(() => import('./FieldHardwarePreview.jsx'))
 
 function TasnimEntry() {
   const [view, setView] = useState('simulation')
@@ -20,6 +23,12 @@ function TasnimEntry() {
     // Demo mode does not mount the LIVE-connected simulation dashboard.
     return <Suspense fallback={<p className="p-6">Memuat demo…</p>}>
       <DemoHardwareV2 />
+    </Suspense>
+  }
+  if (fieldEnabled) {
+    // No live hardware listeners until Firebase Auth confirms a signed-in user.
+    return <Suspense fallback={<p className="p-6">Memuat data alat…</p>}>
+      <FieldHardwarePreview />
     </Suspense>
   }
   return (

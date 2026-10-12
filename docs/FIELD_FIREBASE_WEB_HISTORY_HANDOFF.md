@@ -1,0 +1,107 @@
+# TAS[N]IM — Real device Firebase → Website → History (candidate)
+
+**Goal:** Show actual ESP32 N0/N1/N2 values from Firebase
+`/hardware_test/nodes/<node>/latest`, read persistent history from
+`/hardware_test/history`, and eventually present actual model output. Do
+not invent missing data. This is the research prototype route, not a
+production web service.
+
+## What the field screenshots show
+
+At 12 October 2026 the device records visible in Firebase contain
+`ph`, `tds`, `turbidity`, `timestamp`, `sequence`, and `rssi` under
+each `nodes/N0|N1|N2/latest`. They do NOT include strict V2
+`schema_version`, `node_id`, `sample_id` and `quality_flags`.
+Those omissions explain why the strict V2 preview had been unable to
+display actual field values.
+
+**Do not change the collaborator's working sender merely to display
+values.** The new `src/services/fieldHardwarePreview.js` converts the
+existing values for website display, preserving their acquisition time.
+N1 pH 16.9 is outside the 0–14 range and is displayed as an invalid/missing
+value with a warning; TDS 0 and turbidity 0 remain numeric but are flagged
+for physical-sensor/clamp checks. No calibration accuracy is inferred.
+
+## Viewing the actual Firebase data — read only
+
+1. Keep `tasnim.config.json` set to SIMULATION (as currently required).
+2. Configure the existing `VITE_FIREBASE_*` environment values locally
+   so they point to the intended Firebase project. **Do not paste keys or
+   login passwords in this chat, commit them, or put them in Git history.**
+3. In a local, gitignored `.env.local` file, add:
+
+   ```dotenv
+   VITE_TASNIM_FIELD_PREVIEW=YES
+   ```
+
+4. Run `npm run dev`. The **development-only** field screen asks the
+   user to sign in with an authorized Firebase Authentication account.
+   Under the current LIVE `database.rules.json`, `hardware_test` reads
+   require `auth != null`. We DO NOT modify those Rules.
+5. Once authenticated, the *existing TAS[N]IM dashboard* reads
+   `/hardware_test/nodes`, `/hardware_test/history`, and
+   `/hardware_test/analysis/latest` using Firebase `onValue` listeners.
+   The Monitoring cards display latest; the graph and History table use
+   only actual Firebase history records and update when they change.
+
+This mode is opt-in, only usable with Vite's development server and
+read-only at the web application level. It does NOT write new history.
+If Authentication or Rules deny access, the web will show a connection
+error instead of falling back to synthetic data.
+
+## How future history records will be stored
+
+**Currently the screenshots show latest only.** Firebase cannot infer a
+past time series from three newest values. The microSD CSV is another
+possible source for historical samples, but its contents and schema have
+not been inspected or imported.
+
+`iot/hardware_test_legacy_history_capture_v1.py` contains a **local
+Emulator-only, guarded prototype** that:
+
+- reads only *observed* `nodes/N0|N1|N2/latest`;
+- validates timestamp, sequence, node and sensor values;
+- creates deterministic V2 metadata for the observed raw sample;
+- places a record at `hardware_test/history/{floor(timestamp/300000)*300000}/{node}`;
+- preserves the first sample in each slot, allows exact retries,
+  refuses overwriting a conflicting sample, and **never changes latest**;
+- omits invalid pH (such as N1 = 16.9) and records `PH_INVALID` instead
+  of pretending it was within range;
+- refuses LIVE databases, production credentials and non-demo projects.
+
+The module does **not currently run against the friend's LIVE Firebase**.
+No LIVE history has been created by this candidate commit.
+Offline and local Auth/RTDB Emulator tests demonstrate the conversion
+and immutability behavior using the screenshot records.
+
+**Decision still needed before writing real history:** should the
+collaborator firmware write `history` together with `latest`, or should
+an explicitly authorized backend monitor new incoming measurements and
+write an immutable 5-minute slot? Both are possible; do not activate
+either without verifying writer credentials/Rules and retry behavior.
+Only measurements captured going forward are available unless the
+actual microSD CSV is reviewed and imported separately.
+
+## AI status
+
+The website will show only AI outputs that already exist at
+`hardware_test/analysis/latest`. It will NOT generate model inference
+from a `latest` sensor reading on its own. The AI worker requires enough
+**complete, valid** 5-minute three-node history slots to form a temporal
+context. The screenshot's three readings are from *different* slots,
+and N1 pH is invalid; that evidence is **not** sufficient to declare
+the AI input ready. The model remains `PROTOTYPE_SIMULATION` until field
+validation is completed.
+
+## Verifications without LIVE writes
+
+```bash
+node --test tests/test_field_hardware_preview.mjs
+python3 -m unittest discover -s tests -p 'test_field_legacy_history_capture_v1.py' -v
+python3 scripts/check_production_baseline_guard.py
+npm run build
+```
+
+Both GitHub Actions workflows also run the candidate tests; the
+Emulator workflow runs the localhost RTDB history-capture acceptance
+test. These tests use mock/synthetic data, not real Firebase credentials.

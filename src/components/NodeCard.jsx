@@ -5,7 +5,8 @@ function NodeCard({
   tds,
   turbidity,
   status,
-  lastSeen
+  lastSeen,
+  qualityWarnings = []
 }) {
 
   const isOnline = status === 'Online'
@@ -124,6 +125,12 @@ function NodeCard({
       </div>
 
 
+
+      {qualityWarnings.length > 0 && <p role="status"
+        className="mt-4 rounded-lg border border-amber-600/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
+        Periksa pengukuran: {qualityWarnings.join(', ')}.
+        Nilai invalid ditampilkan sebagai —, bukan dianggap nol.
+      </p>}
 
       {/* LAST SEEN */}
 

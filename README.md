@@ -73,6 +73,24 @@ bash scripts/check_ai_v2_candidate.sh
 The script checks branch, simulation config and Emulator isolation first;
 it must not be pointed at a public Firebase project.
 
+## Field-device Firebase read-only preview (for OMI prototype)
+
+Actual ESP32 N0/N1/N2 values currently exist at
+`hardware_test/nodes/<node>/latest` without canonical V2 metadata.
+A **development-only, authenticated, read-only** mode adapts these values
+for the existing dashboard. Set `VITE_TASNIM_FIELD_PREVIEW=YES` in a
+local gitignored `.env.local`, then run `npm run dev` and log in
+with an authorized Firebase Auth account. Do **not** commit Firebase
+credentials or change LIVE Rules. The graphs and History table subscribe
+to actual `hardware_test/history` and remain empty until records exist.
+
+A separate **Emulator-only** history capture prototype demonstrates how
+new observed legacy samples can be archived as immutable 5-minute slots,
+without modifying `nodes/latest`. It is **not deployed or activated**
+against the real Firebase. See
+[Firebase → website → history handoff](docs/FIELD_FIREBASE_WEB_HISTORY_HANDOFF.md)
+for setup, gaps, and the next required approval.
+
 ## Docs and limits
 
 - [Candidate release gates](docs/GITHUB_CANDIDATE_RELEASE_GATE_20261012.md)
