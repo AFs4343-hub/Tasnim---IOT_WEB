@@ -1,6 +1,7 @@
 """Offline, no model or database dependency for V2 history planning."""
 import copy
 import unittest
+from test_hardware_test_analysis_writer_v2 import record as analysis_record
 from ai.hardware_test_history_v2 import prepare_backlog, model_frame_for_slot
 
 SLOT0 = 1_791_724_500_000
@@ -87,6 +88,55 @@ class HardwareTestHistoryPlannerTests(unittest.TestCase):
         p = self.plan(h)
         self.assertEqual(p["pending_timestamps"], [])
         self.assertEqual(len(p["rows"]), 2)
+
+    def test_versioned_checkpoint_matching_record_is_complete(self):
+        h = {str(SLOT0): slot(SLOT0), str(SLOT0+INTERVAL): slot(SLOT0+INTERVAL)}
+        marker = analysis_record(SLOT0+INTERVAL)
+        marker["session_id"] = "OFFLINE_TEST_SESSION"
+        h[str(SLOT0+INTERVAL)]["analysis"] = marker
+        plan = prepare_backlog(
+            h, session_id="OFFLINE_TEST_SESSION",
+            expected_model_version="prototype-v1",
+        )
+        self.assertEqual(plan["pending_timestamps"], [])
+        self.assertEqual(plan["blocked_analyses"], {})
+
+    def test_wrong_model_version_blocks_review_not_recompute(self):
+        h = {str(SLOT0): slot(SLOT0), str(SLOT0+INTERVAL): slot(SLOT0+INTERVAL)}
+        h[str(SLOT0+INTERVAL)]["analysis"] = analysis_record(SLOT0+INTERVAL)
+        plan = prepare_backlog(
+            h, session_id="OFFLINE_SESSION",
+            expected_model_version="prototype-v2",
+        )
+        self.assertEqual(plan["pending_timestamps"], [])
+        self.assertIn(str(SLOT0+INTERVAL), plan["blocked_analyses"])
+
+    def test_incomplete_or_nonobject_checkpoint_blocks_review(self):
+        for marker in ({"status": "NORMAL"}, "corrupt", {}):
+            with self.subTest(marker=marker):
+                h = {str(SLOT0): slot(SLOT0),
+                     str(SLOT0+INTERVAL): slot(SLOT0+INTERVAL)}
+                h[str(SLOT0+INTERVAL)]["analysis"] = marker
+                plan = prepare_backlog(
+                    h, session_id="OFFLINE_TEST_SESSION",
+                    expected_model_version="prototype-v1",
+                )
+                self.assertEqual(plan["pending_timestamps"], [])
+                self.assertIn(str(SLOT0+INTERVAL), plan["blocked_analyses"])
+
+    def test_versioned_new_slot_remains_pending(self):
+        h = {str(SLOT0): slot(SLOT0), str(SLOT0+INTERVAL): slot(SLOT0+INTERVAL)}
+        plan = prepare_backlog(
+            h, session_id="OFFLINE_TEST_SESSION",
+            expected_model_version="prototype-v1",
+        )
+        self.assertEqual(plan["pending_timestamps"], [SLOT0+INTERVAL])
+        self.assertEqual(plan["blocked_analyses"], {})
+
+    def test_invalid_expected_model_version_rejected(self):
+        with self.assertRaises(ValueError):
+            prepare_backlog({}, session_id="OFFLINE_TEST_SESSION",
+                            expected_model_version=" ")
 
     def test_only_one_slot_is_warmup(self):
         p = self.plan({str(SLOT0): slot(SLOT0)})

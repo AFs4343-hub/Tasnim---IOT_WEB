@@ -54,6 +54,18 @@ class AIHardwarePreviewTests(unittest.TestCase):
                                  model_bundle={}, predict_fn=fake_prediction)
         self.assertEqual(result["predictions"], {})
 
+    def test_version_guard_refuses_uncertain_analysis_marker(self):
+        history = {str(SLOT0): slot(SLOT0),
+                   str(SLOT0+INTERVAL): slot(SLOT0+INTERVAL)}
+        history[str(SLOT0+INTERVAL)]["analysis"] = {"status": "NORMAL"}
+        result = preview_pending(
+            history, session_id="OFFLINE_SESSION",
+            model_bundle={"rf": "NORMAL", "if": False},
+            predict_fn=fake_prediction, expected_model_version="prototype-v1",
+        )
+        self.assertEqual(result["predictions"], {})
+        self.assertIn(str(SLOT0+INTERVAL), result["plan"]["blocked_analyses"])
+
     def test_reject_incomplete_model_output(self):
         with self.assertRaises(ValueError):
             annotate_preview({"status": "NORMAL"}, slot=SLOT0, time_mode="ACTUAL_TIMESTAMP")

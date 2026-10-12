@@ -40,7 +40,8 @@ def annotate_preview(prediction, *, slot, time_mode):
     return result
 
 
-def preview_pending(history, *, session_id, model_bundle, predict_fn):
+def preview_pending(history, *, session_id, model_bundle, predict_fn,
+                    expected_model_version=None):
     """Run pending slots oldest-first, without Firebase/network access.
 
     Returns a plan and candidate predictions. This does not send acknowledgments,
@@ -48,7 +49,10 @@ def preview_pending(history, *, session_id, model_bundle, predict_fn):
     """
     if not callable(predict_fn):
         raise ValueError("predict_fn:must_be_callable")
-    plan = prepare_backlog(history, session_id=session_id)
+    plan = prepare_backlog(
+        history, session_id=session_id,
+        expected_model_version=expected_model_version,
+    )
     predictions = {}
     for slot in plan["pending_timestamps"]:
         frame = model_frame_for_slot(plan, slot)

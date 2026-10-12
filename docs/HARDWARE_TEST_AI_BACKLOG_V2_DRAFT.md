@@ -33,6 +33,22 @@ results, mark a sample acknowledged, or validate field model accuracy.
 
 `/hardware_test/history/<slot_ms>/analysis` is treated as already analyzed when it contains a JSON object. This is a **candidate policy**, not a robust model-version checkpoint. A later backend must compare `model_version`, `data_version` and status, safely write each analysis and advance `/hardware_test/analysis/latest` monotonically. Late-arriving records can also change temporal context for later analyses; recomputation policy is not yet implemented.
 
+## Optional model-version checkpoint guard (offline candidate)
+
+The optional `expected_model_version` parameter on `prepare_backlog` and
+`preview_pending` checks an existing analysis marker against the expected
+model version, session, slot, source metadata, and canonical analysis writer
+schema. An absent marker remains pending. A malformed, incomplete, or
+mismatched marker is returned in `blocked_analyses` with
+`ANALYSIS_CHECKPOINT_REVIEW_REQUIRED`; the affected slot is **not**
+scheduled for inference or overwritten automatically. Earlier callers that
+omit this parameter retain the provisional marker behavior for compatibility.
+
+This guard is read-only. It is not a running AI worker, durable source digest,
+data-version checkpoint, or automated late-backfill recomputation solution.
+A future worker must opt into version checking, verify the source snapshot
+before backend writes, and halt safely on history/context changes.
+
 ## Running a read-only snapshot audit
 
 Export **only the history subtree** into a local JSON file. Do not put credentials into it. Then run:
