@@ -14,6 +14,21 @@ Status: OFFLINE CANDIDATE; not deployed.
 - The first valid slot is used solely to warm up temporal features. Later complete, unanalyzed slots become pending candidates.
 - The adapter creates a Pandas DataFrame compatible with the nine model-input sensor fields and legacy feature engineering, with `time_mode=ACTUAL_TIMESTAMP`.
 
+## Prototype inference dry-run helper
+
+`ai/hardware_test_preview_v2.py` accepts an injected model bundle and
+prediction function (for a local integration, pass
+`ai.predict.predict_latest`). It processes eligible pending slots in ascending
+timestamp order, using all preceding valid rows as temporal context.
+
+A Random Forest / Isolation Forest disagreement is surfaced as
+`model_disagreement=true` and `interpretation=MODEL_REVIEW_REQUIRED`.
+The underlying `status` is not silently relabeled. All output retains
+`model_stage=PROTOTYPE_SIMULATION`.
+
+This function is **offline-only**. It does not connect to Firebase, write
+results, mark a sample acknowledged, or validate field model accuracy.
+
 ## Analysis marker (provisional)
 
 `/hardware_test/history/<slot_ms>/analysis` is treated as already analyzed when it contains a JSON object. This is a **candidate policy**, not a robust model-version checkpoint. A later backend must compare `model_version`, `data_version` and status, safely write each analysis and advance `/hardware_test/analysis/latest` monotonically. Late-arriving records can also change temporal context for later analyses; recomputation policy is not yet implemented.
