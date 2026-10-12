@@ -1,0 +1,77 @@
+name: TASNIM demo Auth and RTDB acceptance
+
+on:
+  push:
+    branches:
+      - infra/field-data
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tasnim-auth-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auth-emulator:
+    name: Real Web SDK sign-in against two demo emulators
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GCLOUD_PROJECT: demo-tasnim-security
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:19004
+      FIREBASE_DATABASE_EMULATOR_HOST: 127.0.0.1:19003
+      TASNIM_AUTH_TEST_EMULATOR_ONLY: 'YES'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install local test-only dependencies
+        run: |
+          npm ci
+          python -m pip install firebase-admin
+          npm install --global firebase-tools@15.1.0
+
+      - name: Assert demo isolation before starting emulators
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          prod = json.loads(Path('firebase.json').read_text())
+          assert prod['database']['rules'] == 'database.rules.json'
+          web = json.loads(Path('tasnim.config.json').read_text())
+          assert web == {'activeDataRoot': 'simulation', 'mode': 'SIMULATION'}
+          cfg = json.loads(Path('firebase.emulator.security.json').read_text())
+          assert cfg['database']['rules'] == 'database.hardware_test.v2.candidate.rules.json'
+          assert cfg['emulators']['database'] == {'host':'127.0.0.1','port':19003}
+          assert cfg['emulators']['auth'] == {'host':'127.0.0.1','port':19004}
+          print('[SAFE] explicit localhost demo project, Rules candidate only')
+          PY
+
+      - name: Exercise real Auth emulator JWT and RTDB Rules
+        run: |
+          firebase emulators:exec \
+            --only database,auth \
+            --project demo-tasnim-security \
+            --config firebase.emulator.security.json \
+            'bash scripts/test_hardware_auth_emulator.sh'
+
+      - name: Record scope
+        run: |
+          echo '[PASS] Web SDK Auth + RTDB demo integration'
+          echo '[SAFE] No LIVE Firebase deploy, no production secrets, no firmware changes'
