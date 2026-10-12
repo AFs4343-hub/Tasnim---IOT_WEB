@@ -1,0 +1,113 @@
+// Candidate read-only presentation adapter for /hardware_test V2.
+// Does not import Firebase, perform writes or infer sensor accuracy.
+export const NODE_IDS = Object.freeze(['N0', 'N1', 'N2'])
+export const DATA_ROOT = 'hardware_test'
+export const SLOT_MS = 300_000
+const INFO_FLAGS = new Set(['BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED'])
+const SENSOR_LIMITS = {
+  ph: (x) => x >= 0 && x <= 14,
+  tds: (x) => x >= 0 && x <= 5000,
+  turbidity: (x) => x >= 0 && x < 3000,
+}
+
+export function isAllowedRole(role) {
+  return role === 'admin' || role === 'manager' || role === 'viewer'
+}
+
+export function getRoleFromClaims(claims) {
+  return isAllowedRole(claims?.tasnim_role) ? claims.tasnim_role : null
+}
+
+export function validEpoch(value) {
+  return Number.isSafeInteger(value) && value >= 1_704_067_200_000
+}
+
+export function canonicalSlot(value) {
+  return validEpoch(value) ? Math.floor(value / SLOT_MS) * SLOT_MS : null
+}
+
+export function nodeMeasurement(raw, expectedNode) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)
+      || raw.node_id !== expectedNode || raw.schema_version !== 2
+      || !validEpoch(raw.timestamp)
+      || typeof raw.sample_id !== 'string'
+      || !raw.sample_id.startsWith(expectedNode + '_')
+      || !Number.isSafeInteger(raw.sequence) || raw.sequence < 0) {
+    return null
+  }
+
+  // An empty array may be omitted by RTDB. Non-empty flags are never ignored.
+  const flags = raw.quality_flags === undefined ? [] : raw.quality_flags
+  if (!Array.isArray(flags) || !flags.every(f => typeof f === 'string')) return null
+  const requiresReview = flags.some(flag => !INFO_FLAGS.has(flag))
+  const values = {}
+  for (const [key, valid] of Object.entries(SENSOR_LIMITS)) {
+    const value = raw[key]
+    values[key] = !requiresReview && typeof value === 'number'
+      && Number.isFinite(value) && valid(value) ? value : null
+  }
+
+  return {
+    node_id: expectedNode,
+    timestamp: raw.timestamp,
+    sequence: raw.sequence,
+    sample_id: raw.sample_id,
+    rssi: typeof raw.rssi === 'number' && Number.isFinite(raw.rssi) ? raw.rssi : null,
+    flags: [...flags],
+    requiresReview,
+    ...values,
+  }
+}
+
+export function latestNodes(raw) {
+  const records = {}
+  for (const node of NODE_IDS) {
+    records[node] = nodeMeasurement(raw?.[node]?.latest, node)
+  }
+  return records
+}
+
+export function historyRows(raw, limit = 60) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+  const rows = []
+  for (const [slotKey, entry] of Object.entries(raw)) {
+    const slot = Number(slotKey)
+    if (!Number.isSafeInteger(slot) || slot <= 0 || slot % SLOT_MS !== 0
+        || String(slot) !== slotKey || !entry || typeof entry !== 'object') continue
+    const nodes = {}
+    for (const node of NODE_IDS) {
+      const parsed = nodeMeasurement(entry[node], node)
+      nodes[node] = parsed && canonicalSlot(parsed.timestamp) === slot ? parsed : null
+    }
+    const complete = NODE_IDS.every(node => {
+      const r = nodes[node]
+      return r && !r.requiresReview
+        && r.ph !== null && r.tds !== null && r.turbidity !== null
+    })
+    rows.push({ slot, nodes, complete, hasAnalysis: !!entry.analysis })
+  }
+  rows.sort((a, b) => a.slot - b.slot)
+  return rows.slice(-Math.max(1, Math.min(limit, 240)))
+}
+
+export function analysisStatus(analysis, rows) {
+  if (!analysis || typeof analysis !== 'object'
+      || !validEpoch(analysis.source_timestamp_ms)) {
+    return { state: 'NO_ANALYSIS', analysis: null }
+  }
+  if (analysis.data_source !== 'HARDWARE_TEST'
+      || analysis.model_stage !== 'PROTOTYPE_SIMULATION') {
+    return { state: 'UNTRUSTED_ANALYSIS', analysis: null }
+  }
+  const last = rows[rows.length - 1]
+  const matches = last?.complete && last.slot === analysis.source_timestamp_ms
+  return { state: matches ? 'MATCHED_PROTOTYPE' : 'STALE_OR_INCOMPLETE',
+    analysis }
+}
+
+export function wita(value) {
+  return validEpoch(value) ? new Date(value).toLocaleString('id-ID', {
+    timeZone: 'Asia/Makassar', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }) + ' WITA' : '—'
+}
