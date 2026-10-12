@@ -34,6 +34,7 @@ echo "=== OFFLINE TEST PACK ==="
 for pattern in \
   test_hardware_test_history_v2.py \
   test_hardware_test_preview_v2.py \
+  test_hardware_test_worker_v2.py \
   test_hardware_test_ingestion_core.py \
   test_hardware_test_contract_v2.py \
   test_real_test_bridge_v2.py \

@@ -6,6 +6,7 @@ a stable record across retries. This module never connects to a database by
 itself, and is NOT authorized for LIVE use.
 """
 import json
+import re
 from iot.hardware_test_contract_v2 import SLOT_MS
 
 ROOT = "hardware_test"
@@ -15,7 +16,7 @@ ALLOWED_KEYS = frozenset({
     "model_stage", "data_source", "time_mode", "status",
     "location", "random_forest", "isolation_forest",
     "dominant_zscore", "model_disagreement", "interpretation",
-    "timestamp", "inference_timestamp_ms",
+    "timestamp", "inference_timestamp_ms", "source_digest_sha256",
 })
 
 
@@ -80,6 +81,11 @@ def prepare_analysis_record(preview, *, model_version, inference_timestamp_ms):
             raise ValueError("analysis:missing_" + key)
     if len(preview["session_id"]) > 80:
         raise ValueError("analysis:session_too_long")
+    if "source_digest_sha256" in preview and not (
+        type(preview["source_digest_sha256"]) is str
+        and re.fullmatch(r"[0-9a-f]{64}", preview["source_digest_sha256"])
+    ):
+        raise ValueError("analysis:invalid_source_digest")
     if preview["data_source"] != "HARDWARE_TEST":
         raise ValueError("analysis:wrong_source")
     if preview["model_stage"] != "PROTOTYPE_SIMULATION":
