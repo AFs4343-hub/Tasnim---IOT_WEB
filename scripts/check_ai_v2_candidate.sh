@@ -31,6 +31,9 @@ assert Path("ai/models/tasnim_ai_bundle.joblib").is_file(), (
 print("[PASS] SIMULATION, emulator isolation, and local model preflight")
 PY
 
+echo "=== FROZEN PRODUCTION BASELINE (READ-ONLY) ==="
+python3 scripts/check_production_baseline_guard.py
+
 echo "=== OFFLINE TEST PACK ==="
 for pattern in \
   test_hardware_test_history_v2.py \
@@ -45,6 +48,7 @@ for pattern in \
   test_supervisor_demo_cli_guard.py \
   test_hardware_test_ingestion_core.py \
   test_backend_latest_integrity_v1.py \
+  test_production_baseline_guard.py \
   test_hardware_test_contract_v2.py \
   test_hardware_v2_cross_layer_contract.py \
   test_real_test_bridge_v2.py \

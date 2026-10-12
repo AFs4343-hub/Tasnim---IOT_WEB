@@ -47,6 +47,9 @@ jobs:
           print("[PASS] SIMULATION, production Rules mapping, localhost demo target")
           PY
 
+      - name: Verify frozen production file baseline
+        run: python scripts/check_production_baseline_guard.py
+
       - name: Run model-independent offline tests
         run: |
           set -euo pipefail
@@ -63,6 +66,7 @@ jobs:
             test_supervisor_demo_cli_guard.py \
             test_hardware_test_ingestion_core.py \
             test_backend_latest_integrity_v1.py \
+            test_production_baseline_guard.py \
             test_hardware_test_contract_v2.py \
             test_hardware_v2_cross_layer_contract.py \
             test_real_test_bridge_v2.py \

@@ -63,6 +63,9 @@ jobs:
           print('[SAFE] explicit localhost demo project, Rules candidate only')
           PY
 
+      - name: Verify frozen production file baseline
+        run: python scripts/check_production_baseline_guard.py
+
       - name: Exercise real Auth/RTDB and prototype worker integration
         run: |
           firebase emulators:exec \
