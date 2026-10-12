@@ -96,3 +96,22 @@ Future production prerequisites: approved domain, trusted TLS termination,
 edge rate limits, secret storage/rotation, nonce expiry and retention
 policy, monitoring/alerts, hardened input validation, service-level tests,
 device provisioning and rollback. No LIVE migration has been approved.
+
+
+## Direct server construction safety (candidate hardening)
+
+`create_demo_server` now refuses to open its localhost listening socket
+unless the caller explicitly opts into `TASNIM_GATEWAY_EMULATOR_ONLY=YES`,
+uses `demo-tasnim-security` and `127.0.0.1:19003`, leaves
+`GOOGLE_APPLICATION_CREDENTIALS` unset, supplies an adapter explicitly
+declaring the same Emulator project/host, and injects **three distinct**
+32–64 byte test-only HMAC keys. The guard applies even when tests or other
+Python code directly call the server-construction API instead of CLI
+`main()`. The injected adapter constructs its own RTDB URL explicitly;
+HTTP requests never select a database.
+
+Both standalone FakeDB HTTP tests and real Auth/RTDB Emulator tests exercise
+the guarded API. This reduces accidental LIVE targeting; a caller could
+forge Python adapter metadata, so this is not a substitute for real
+production infrastructure identity, network isolation or trusted gateway
+deployment. No LIVE Firebase Rules, keys, or node firmware are changed.

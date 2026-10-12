@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -16,7 +17,20 @@ from test_hardware_test_ingestion_core import FakeDB, sample
 
 class DemoGatewayHTTPTests(unittest.TestCase):
     def setUp(self):
-        self.db = FakeDB()
+        self.demo_env = patch.dict("os.environ", {
+            "TASNIM_GATEWAY_EMULATOR_ONLY": "YES",
+            "FIREBASE_DATABASE_EMULATOR_HOST": "127.0.0.1:19003",
+            "GCLOUD_PROJECT": "demo-tasnim-security",
+        }, clear=True)
+        self.demo_env.start()
+        self.addCleanup(self.demo_env.stop)
+
+        class FakeDemoAdapter(FakeDB):
+            emulator_only = True
+            emulator_project = "demo-tasnim-security"
+            emulator_host = "127.0.0.1:19003"
+
+        self.db = FakeDemoAdapter()
         self.server = create_demo_server(
             self.db, KEYS, port=0, clock_ms=lambda: NOW
         )
@@ -44,6 +58,42 @@ class DemoGatewayHTTPTests(unittest.TestCase):
                 return exc.code, json.loads(exc.read())
             finally:
                 exc.close()
+
+    def test_00_server_creation_refuses_live_like_adapter_before_bind(self):
+        # Test direct create_demo_server callers, NOT only the CLI main.
+        for kwargs in (
+            {"emulator_only": False},
+            {"emulator_project": "production"},
+            {"emulator_host": "live-db.example.invalid"},
+        ):
+            class WrongAdapter:
+                emulator_only = kwargs.get("emulator_only", True)
+                emulator_project = kwargs.get("emulator_project", "demo-tasnim-security")
+                emulator_host = kwargs.get("emulator_host", "127.0.0.1:19003")
+                def reference(self, path):
+                    self.fail("no database should be accessed")
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(RuntimeError, "REFUSED"):
+                create_demo_server(WrongAdapter(), KEYS, port=0)
+
+    def test_00_server_creation_refuses_bad_keys_before_bind(self):
+        for keys in (
+            {"N0": KEYS["N0"], "N1": KEYS["N0"], "N2": KEYS["N2"]},
+            {"N0": b"short", "N1": KEYS["N1"], "N2": KEYS["N2"]},
+            {"N0": KEYS["N0"], "N1": KEYS["N1"]},
+        ):
+            with self.subTest(keys=tuple(keys)), self.assertRaisesRegex(RuntimeError, "REFUSED"):
+                create_demo_server(self.db, keys, port=0)
+
+    def test_00_server_creation_refuses_wrong_env_and_service_account(self):
+        for wrong in (
+            {"GCLOUD_PROJECT": "production"},
+            {"FIREBASE_DATABASE_EMULATOR_HOST": "db.example.invalid"},
+            {"TASNIM_GATEWAY_EMULATOR_ONLY": "NO"},
+            {"GOOGLE_APPLICATION_CREDENTIALS": "/tmp/prod.json"},
+        ):
+            with self.subTest(wrong=wrong), patch.dict("os.environ", wrong):
+                with self.assertRaisesRegex(RuntimeError, "REFUSED"):
+                    create_demo_server(self.db, KEYS, port=0)
 
     def test_01_health_and_unknown_path(self):
         status, result = self.request("/healthz", method="GET")

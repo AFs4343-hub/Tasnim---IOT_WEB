@@ -136,8 +136,33 @@ def make_handler(db, secrets, *, clock_ms=None):
     return Handler
 
 
+def require_demo_adapter(db, secrets):
+    """Fail closed on direct HTTP-server callers, not only the CLI main.
+
+    All adapters, including test fakes, must explicitly identify as tied to
+    the localhost demo RTDB. The backend's actual database URL must also be
+    fixed by its trusted construction code, not controlled by HTTP headers.
+    """
+    require_demo_environment()
+    if (
+        getattr(db, "emulator_only", None) is not True
+        or getattr(db, "emulator_project", None) != DEMO_PROJECT
+        or getattr(db, "emulator_host", None) != EMULATOR_HOST
+        or not callable(getattr(db, "reference", None))
+    ):
+        raise RuntimeError("REFUSED: gateway requires a demo-only RTDB adapter")
+    if type(secrets) is not dict or set(secrets) != {"N0", "N1", "N2"}:
+        raise RuntimeError("REFUSED: three demo node keys required")
+    if any(type(key) is not bytes or not 32 <= len(key) <= 64
+           for key in secrets.values()):
+        raise RuntimeError("REFUSED: invalid demo node key material")
+    if len(set(secrets.values())) != 3:
+        raise RuntimeError("REFUSED: demo node keys must be distinct")
+
+
 def create_demo_server(db, secrets, *, port=0, clock_ms=None):
-    """Testable localhost HTTP server. Cannot bind a public interface."""
+    """Local-only HTTP server, with guard BEFORE opening a listening socket."""
+    require_demo_adapter(db, secrets)
     if type(port) is not int or port < 0 or port > 65535:
         raise ValueError("port:invalid")
     return ThreadingHTTPServer(
@@ -153,6 +178,8 @@ def require_demo_environment():
         raise RuntimeError("REFUSED: emulator host mismatch")
     if os.getenv("GCLOUD_PROJECT") != DEMO_PROJECT:
         raise RuntimeError("REFUSED: demo project mismatch")
+    if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        raise RuntimeError("REFUSED: no service-account credentials in demo gateway")
 
 
 def read_demo_secrets():
@@ -188,6 +215,10 @@ def main(argv=None):
     )
 
     class DatabaseAdapter:
+        emulator_only = True
+        emulator_project = DEMO_PROJECT
+        emulator_host = EMULATOR_HOST
+
         def reference(self, path):
             return db.reference(path, app=app)
 

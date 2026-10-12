@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
@@ -34,11 +35,22 @@ class RealHTTPGatewayEmulatorTests(unittest.TestCase):
         )
 
         class Adapter:
+            emulator_only = True
+            emulator_project = PROJECT
+            emulator_host = HOST
+
             def reference(self, path):
                 return db.reference(path, app=cls.app)
 
-        cls.server = create_demo_server(Adapter(), KEYS, port=0,
-                                        clock_ms=lambda: NOW)
+        cls.demo_environment = patch.dict(os.environ, {
+            "TASNIM_GATEWAY_EMULATOR_ONLY": "YES",
+        })
+        cls.demo_environment.start()
+        try:
+            cls.server = create_demo_server(Adapter(), KEYS, port=0,
+                                            clock_ms=lambda: NOW)
+        finally:
+            cls.demo_environment.stop()
         cls.thread = threading.Thread(target=cls.server.serve_forever,
                                       daemon=True)
         cls.thread.start()
