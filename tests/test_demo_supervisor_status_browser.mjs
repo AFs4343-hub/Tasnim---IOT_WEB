@@ -54,6 +54,11 @@ test('one-shot synthetic supervisor is visible to allowed browser role, private 
         + '?ns=demo-tasnim-security-default-rtdb&auth=' + encodeURIComponent(token),
     )
     assert.equal(denied.status, 401)
+    const deniedAudit = await fetch(
+      'http://127.0.0.1:19003/worker_state/ai_v2_supervisor/audit_v1.json'
+        + '?ns=demo-tasnim-security-default-rtdb&auth=' + encodeURIComponent(token),
+    )
+    assert.equal(deniedAudit.status, 401)
     const write = await fetch(base + 'snapshot', {
       method: 'PATCH', headers: { Authorization: 'Bearer ' + token },
     })

@@ -126,6 +126,9 @@ def execute(mode):
     from ai.hardware_test_supervisor_v1 import run_supervised_emulator_cycle
     from ai.hardware_test_supervisor_status_v1 import STATUS_PATH
     from ai.hardware_test_supervisor_feed_v1 import FEED_PATH
+    from ai.hardware_test_supervisor_audit_v1 import (
+        AUDIT_PATH, verify_supervisor_audit,
+    )
 
     class LocalDemoAdapter:
         emulator_only = True
@@ -148,9 +151,15 @@ def execute(mode):
             # Status-only read, no model or worker writes.
             private = adapter.reference(STATUS_PATH).get()
             feed = adapter.reference(FEED_PATH).get()
+            audit = adapter.reference(AUDIT_PATH).get()
+            events = verify_supervisor_audit(audit)
             print(json.dumps({
                 "status": private if type(private) is dict else None,
                 "browser_feed_matches": private is not None and private == feed,
+                "audit_event_count": len(events),
+                "audit_matches_latest": bool(
+                    events and events[-1]["record"] == private
+                ),
             }, sort_keys=True))
             return 0
         confirm_demo_fixture(adapter)
@@ -168,7 +177,8 @@ def execute(mode):
             private = adapter.reference(STATUS_PATH).get()
             public = adapter.reference(FEED_PATH).get()
             if private != public or not report["status_persisted"] \
-                    or not report["feed_persisted"]:
+                    or not report["feed_persisted"] \
+                    or not report["audit_persisted"]:
                 print("[STOP] private/browser status mismatch; manual review required.")
                 return 2
         return 0 if report["state"] in ("PREVIEW", "PROCESSED", "IDLE") else 2

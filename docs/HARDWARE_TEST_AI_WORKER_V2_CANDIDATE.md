@@ -246,3 +246,42 @@ demo is running: both suites use the same localhost Emulator ports.
 Tests cover `--preview`, one actual `--run`, `--status`, and a
 browser-role read of the sanitized feed, while browser reads of the
 privileged `worker_state` tree remain denied by candidate Rules.
+
+
+## Audit operasional V1 (Emulator, private only)
+
+`ai/hardware_test_supervisor_audit_v1.py` stores **at most twenty**
+sanitized supervisor outcomes under `/worker_state/ai_v2_supervisor/audit_v1`.
+Every entry has a monotonically increasing sequence, the existing strict
+status fields, and a SHA-256 link to its predecessor. The retained window
+is checked before every append; corruption, gaps or changed counters block
+the write and require manual review. Replays and older timestamps are not
+duplicated. A model prediction, sensor value, token, raw exception, and
+service-account path are **not** stored. The browser cannot access this
+private tree; use `python3 scripts/run_supervisor_demo_once.py --status`
+to read `audit_event_count` and `audit_matches_latest`.
+
+The audit is appended **only after** authoritative status and sanitized
+browser feed were committed. Three paths are separate transactions rather
+than one atomic commit; any failure requires inspection. This is an
+engineering integrity check, **not** an authenticated or tamper-proof
+production log (an Admin can rewrite even the hash chain).
+
+## Genuine prototype RF/IF model compatibility (offline, no Firebase)
+
+`python3 scripts/check_real_model_contract.py --check` loads the existing
+team-controlled `ai/models/tasnim_ai_bundle.joblib`, runs the bundled RF
+and Isolation Forest through the existing `ai.predict.predict_latest`
+pipeline on four **synthetic** 5-minute slots, twice, then verifies all
+three output records are canonical and deterministic for that fixed input.
+It reports only contract compatibility and a short SHA-256 model-file
+fingerprint, without persisting any prediction or data.
+
+Run this in Codespaces **after stopping the Emulator demo if desired**
+(no network required). The GitHub CI intentionally has NO model artifact:
+it tests the runner's validation behavior using a test predictor only.
+The local prototype artifact is additionally covered by
+`tests/test_hardware_test_preview_real_model.py` in the local full
+test pack. Neither compatibility test evaluates field accuracy, calibration,
+model drift, recall, false positives, or water safety. Joblib uses Python
+object deserialization: only load a locally trusted team-produced bundle.

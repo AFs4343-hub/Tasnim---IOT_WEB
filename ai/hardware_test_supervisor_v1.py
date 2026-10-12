@@ -17,6 +17,7 @@ from ai.hardware_test_supervisor_status_v1 import (
     make_supervisor_status, persist_supervisor_status,
 )
 from ai.hardware_test_supervisor_feed_v1 import publish_demo_supervisor_feed
+from ai.hardware_test_supervisor_audit_v1 import append_supervisor_audit
 
 _RETRYABLE = (ConnectionError, TimeoutError, WorkerSourceChanged)
 
@@ -91,16 +92,20 @@ def run_supervised_emulator_cycle(
     # receives a persistence error and must investigate the local demo.
     private_written = False
     public_written = False
+    audit_written = False
     if record_status and not dry_run:
         private_written = persist_supervisor_status(db, status)
         if private_written:
-            # A second, read-only browser-facing copy. This is NOT an
-            # atomic multi-path commit; mismatches are surfaced explicitly.
+            # All three paths use individual Emulator transactions, NOT an
+            # atomic multi-path commit. A failure propagates to the caller.
             public_written = publish_demo_supervisor_feed(db, status)
+            if public_written:
+                audit_written = append_supervisor_audit(db, status)
     return {
         **status,
         "status_persisted": private_written,
         "feed_persisted": public_written,
+        "audit_persisted": audit_written,
     }
 
 

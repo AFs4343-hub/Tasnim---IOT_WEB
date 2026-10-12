@@ -13,6 +13,9 @@ from ai.hardware_test_supervisor_status_v1 import (
 from ai.hardware_test_supervisor_feed_v1 import (
     FEED_PATH, publish_demo_supervisor_feed,
 )
+from ai.hardware_test_supervisor_audit_v1 import (
+    AUDIT_PATH, verify_supervisor_audit,
+)
 from ai.hardware_test_worker_lease_v2 import LEASE_PATH, RELEASED, acquire_exclusive_emulator_lock
 from test_hardware_test_worker_lease_v2 import LeaseFakeDB
 from test_hardware_test_worker_v2 import ENV, MODEL, prediction, three_slots
@@ -65,6 +68,11 @@ class SupervisorCandidateTests(unittest.TestCase):
         self.assertEqual(first["processed_count"], 2)
         self.assertTrue(first["status_persisted"])
         self.assertTrue(first["feed_persisted"])
+        self.assertTrue(first["audit_persisted"])
+        self.assertEqual(
+            verify_supervisor_audit(self.db.values[AUDIT_PATH])[-1]["record"],
+            self.db.values[STATUS_PATH],
+        )
         self.assertEqual(self.db.values[STATUS_PATH], self.db.values[FEED_PATH])
         self.assertEqual(self.db.values[LEASE_PATH], RELEASED)
         stored = self.db.values[STATUS_PATH]
@@ -76,6 +84,8 @@ class SupervisorCandidateTests(unittest.TestCase):
         self.assertEqual(second["state"], "IDLE")
         self.assertFalse(second["status_persisted"])  # Same timestamp: no overwrite.
         self.assertFalse(second["feed_persisted"])
+        self.assertFalse(second["audit_persisted"])
+        self.assertEqual(len(verify_supervisor_audit(self.db.values[AUDIT_PATH])), 1)
         self.assertEqual(self.db.values[STATUS_PATH], stored)
 
     def test_transient_partial_latest_failure_recovers_on_bounded_retry(self):

@@ -38,6 +38,8 @@ for pattern in \
   test_hardware_test_worker_v2.py \
   test_hardware_test_worker_lease_v2.py \
   test_hardware_test_supervisor_v1.py \
+  test_hardware_test_supervisor_audit_v1.py \
+  test_real_model_contract_cli.py \
   test_supervisor_demo_cli_guard.py \
   test_hardware_test_ingestion_core.py \
   test_hardware_test_contract_v2.py \
@@ -52,6 +54,9 @@ for pattern in \
 do
   python3 -m unittest discover -s tests -p "$pattern" -v
 done
+
+echo "=== TRUSTED LOCAL RF/IF BUNDLE READ-ONLY CONTRACT ==="
+python3 scripts/check_real_model_contract.py --check
 
 echo "=== FIREBASE DEMO EMULATOR PACK ==="
 firebase emulators:exec \
