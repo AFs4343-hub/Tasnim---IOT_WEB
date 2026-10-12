@@ -97,6 +97,31 @@ def prepare_analysis_record(preview, *, model_version, inference_timestamp_ms):
     if not isinstance(preview.get("dominant_zscore"), dict):
         raise ValueError("analysis:missing_zscore")
 
+    # Keep model outputs and summary status internally consistent.
+    rf = preview["random_forest"]
+    iso = preview["isolation_forest"]
+    rf_label = rf.get("prediction")
+    confidence = rf.get("confidence")
+    iso_anomaly = iso.get("is_anomaly")
+    if not isinstance(rf_label, str) or not rf_label.strip():
+        raise ValueError("analysis:invalid_rf_prediction")
+    if type(confidence) not in (int, float) or not 0 <= confidence <= 1:
+        raise ValueError("analysis:invalid_rf_confidence")
+    if type(iso_anomaly) is not bool:
+        raise ValueError("analysis:invalid_iso_anomaly")
+    expected_status = "NORMAL" if rf_label == "NORMAL" else "ANOMALI"
+    if preview["status"] != expected_status:
+        raise ValueError("analysis:rf_status_mismatch")
+    disagreement = (rf_label != "NORMAL") != iso_anomaly
+    if preview["model_disagreement"] != disagreement:
+        raise ValueError("analysis:model_disagreement_mismatch")
+    expected_interpretation = (
+        "MODEL_REVIEW_REQUIRED" if disagreement
+        else "PROTOTYPE_NOT_FIELD_VALIDATED"
+    )
+    if preview["interpretation"] != expected_interpretation:
+        raise ValueError("analysis:interpretation_mismatch")
+
     record = {k: v for k, v in preview.items() if k in ALLOWED_KEYS}
     record["model_version"] = model_version
     record["inference_timestamp_ms"] = inference_timestamp_ms
