@@ -24,7 +24,7 @@ from test_hardware_test_history_v2 import SLOT0, INTERVAL, slot
 
 class SupervisorFakeDB(LeaseFakeDB):
     def reference(self, path):
-        if path != STATUS_PATH:
+        if path not in (STATUS_PATH, FEED_PATH, AUDIT_PATH):
             return super().reference(path)
         parent = self
 

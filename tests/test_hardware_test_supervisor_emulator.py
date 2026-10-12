@@ -13,6 +13,10 @@ from ai.hardware_test_supervisor_status_v1 import (
     STATUS_PATH, make_supervisor_status, persist_supervisor_status,
 )
 from ai.hardware_test_supervisor_feed_v1 import FEED_PATH
+from ai.hardware_test_supervisor_recovery_v1 import (
+    inspect_demo_supervisor_reporting, repair_demo_supervisor_reporting,
+    SupervisorReportingReviewRequired,
+)
 from ai.hardware_test_supervisor_audit_v1 import (
     AUDIT_PATH, SupervisorAuditReviewRequired,
     append_supervisor_audit, verify_supervisor_audit,
@@ -142,6 +146,42 @@ class SupervisorDemoEmulatorTests(unittest.TestCase):
                 state="IDLE", timestamp_ms=SLOT0+5, attempts=1,
             ))
         self.assertEqual(self.read(AUDIT_PATH), saved)
+
+    def test_real_emulator_reconciles_partial_private_report_without_inference(self):
+        # Inject a crash window: the private record was committed but the
+        # public feed and private audit were not. Recovery never reads models.
+        status = make_supervisor_status(
+            state="PROCESSED", timestamp_ms=SLOT0 + 20*INTERVAL,
+            attempts=2, result={"processed_slots": [SLOT0 + INTERVAL]},
+        )
+        self.assertTrue(persist_supervisor_status(self.adapter, status))
+        self.assertIsNone(self.read(FEED_PATH))
+        self.assertIsNone(self.read(AUDIT_PATH))
+        self.assertEqual(inspect_demo_supervisor_reporting(self.adapter)["state"],
+                         "RECOVERY_REQUIRED")
+        self.assertEqual(repair_demo_supervisor_reporting(self.adapter)["state"],
+                         "REPAIRED")
+        self.assertEqual(self.read(STATUS_PATH), self.read(FEED_PATH))
+        events = verify_supervisor_audit(self.read(AUDIT_PATH))
+        self.assertEqual(events[-1]["record"], status)
+        self.assertEqual(repair_demo_supervisor_reporting(self.adapter)["state"],
+                         "CONSISTENT")
+        self.assertIsNone(self.read("hardware_test/analysis/latest"))
+
+    def test_real_emulator_recovery_does_not_overwrite_conflicting_feed(self):
+        status = make_supervisor_status(
+            state="IDLE", timestamp_ms=SLOT0 + 20*INTERVAL, attempts=1,
+        )
+        conflict = make_supervisor_status(
+            state="FAILED", timestamp_ms=SLOT0 + 20*INTERVAL,
+            attempts=1, error_code="WORKER_ERROR",
+        )
+        self.assertTrue(persist_supervisor_status(self.adapter, status))
+        db.reference(FEED_PATH, app=self.app).set(conflict)
+        with self.assertRaises(SupervisorReportingReviewRequired):
+            repair_demo_supervisor_reporting(self.adapter)
+        self.assertEqual(self.read(FEED_PATH), conflict)
+        self.assertIsNone(self.read(AUDIT_PATH))
 
     def test_no_overwrite_newer_status_and_guard_refuses_production(self):
         old = make_supervisor_status(

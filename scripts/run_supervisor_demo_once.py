@@ -7,6 +7,9 @@ bash scripts/run_hardware_demo_codespaces.sh is running in terminal one.
   python3 scripts/run_supervisor_demo_once.py --preview  # NO DB writes
   python3 scripts/run_supervisor_demo_once.py --run      # demo ONLY; one cycle
   python3 scripts/run_supervisor_demo_once.py --status   # NO DB writes
+  python3 scripts/run_supervisor_demo_once.py --repair-report
+  # Explicit Emulator-only recovery of private status -> feed -> audit.
+  # Does not rerun inference or modify measurement history.
 
 The predictor here is a deterministic SYNTHETIC fixture, NOT a trained AI model.
 No daemon, no auto-triggering, no Firebase service account, no LIVE fallback.
@@ -124,6 +127,7 @@ def execute(mode):
     import firebase_admin
     from firebase_admin import db
     from ai.hardware_test_supervisor_v1 import run_supervised_emulator_cycle
+    from ai.hardware_test_supervisor_recovery_v1 import repair_demo_supervisor_reporting
     from ai.hardware_test_supervisor_status_v1 import STATUS_PATH
     from ai.hardware_test_supervisor_feed_v1 import FEED_PATH
     from ai.hardware_test_supervisor_audit_v1 import (
@@ -163,6 +167,11 @@ def execute(mode):
             }, sort_keys=True))
             return 0
         confirm_demo_fixture(adapter)
+        if mode == "repair-report":
+            outcome = repair_demo_supervisor_reporting(adapter)
+            print("[SAFE] Emulator-only report reconciliation; no model inference.")
+            print(json.dumps(outcome, sort_keys=True))
+            return 0 if outcome["state"] in ("CONSISTENT", "REPAIRED") else 2
         dry_run = mode == "preview"
         report = run_supervised_emulator_cycle(
             adapter, session_id=SESSION, model_version=MODEL,
@@ -195,8 +204,14 @@ def main():
                        help="ONE supervised synthetic demo cycle (writes Emulator ONLY)")
     modes.add_argument("--status", action="store_true",
                        help="read-only status and browser feed check")
+    modes.add_argument("--repair-report", action="store_true",
+                       help="explicitly reconcile already-committed Emulator status only")
     args = parser.parse_args()
-    return execute("preview" if args.preview else "run" if args.run else "status")
+    return execute(
+        "preview" if args.preview else
+        "run" if args.run else
+        "repair-report" if args.repair_report else "status"
+    )
 
 
 if __name__ == "__main__":

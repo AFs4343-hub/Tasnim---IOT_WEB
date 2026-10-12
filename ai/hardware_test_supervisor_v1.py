@@ -18,6 +18,9 @@ from ai.hardware_test_supervisor_status_v1 import (
 )
 from ai.hardware_test_supervisor_feed_v1 import publish_demo_supervisor_feed
 from ai.hardware_test_supervisor_audit_v1 import append_supervisor_audit
+from ai.hardware_test_supervisor_recovery_v1 import (
+    inspect_demo_supervisor_reporting, SupervisorReportingReviewRequired,
+)
 
 _RETRYABLE = (ConnectionError, TimeoutError, WorkerSourceChanged)
 
@@ -47,6 +50,15 @@ def run_supervised_emulator_cycle(
     timestamp = int(time.time() * 1000) if now_ms is None else now_ms
     if type(timestamp) is not int or timestamp <= 0:
         raise ValueError("supervisor:invalid_timestamp")
+
+    if record_status and not dry_run:
+        reporting = inspect_demo_supervisor_reporting(db)
+        if reporting["state"] == "RECOVERY_REQUIRED":
+            # A prior cycle reached private status but not every mirror.
+            # Prevent a subsequent IDLE/PROCESSED cycle from hiding it.
+            raise SupervisorReportingReviewRequired(
+                "supervisor_reporting:repair_required_before_new_cycle"
+            )
 
     state, error, output = "FAILED", "WORKER_ERROR", None
     used_attempts = 0

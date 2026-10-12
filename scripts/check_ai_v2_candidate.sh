@@ -38,6 +38,7 @@ for pattern in \
   test_hardware_test_worker_v2.py \
   test_hardware_test_worker_lease_v2.py \
   test_hardware_test_supervisor_v1.py \
+  test_hardware_test_supervisor_recovery_v1.py \
   test_hardware_test_supervisor_audit_v1.py \
   test_real_model_contract_cli.py \
   test_supervisor_demo_cli_guard.py \

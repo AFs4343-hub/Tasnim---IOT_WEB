@@ -285,3 +285,44 @@ The local prototype artifact is additionally covered by
 test pack. Neither compatibility test evaluates field accuracy, calibration,
 model drift, recall, false positives, or water safety. Joblib uses Python
 object deserialization: only load a locally trusted team-produced bundle.
+
+
+## Supervisor private/feed/audit crash-window reconciliation (October 2026)
+
+An explicitly invoked Supervisor cycle writes three distinct RTDB paths in
+order: private `worker_state/ai_v2_supervisor/latest`, sanitized browser
+mirror `hardware_test/operations/supervisor/latest`, and private bounded
+`worker_state/ai_v2_supervisor/audit_v1`. The writes are individually
+transactional, **not one atomic commit**. A crash after the private status
+or feed write can leave a partial report, even when analysis checkpoints
+were already committed.
+
+The offline-testable `ai/hardware_test_supervisor_recovery_v1.py` inspects
+all three paths with the existing demo-Emulator identity guards.
+If private status is canonical but the feed/audit are absent or strictly
+older, a **manual**, expressly requested reconciliation can finish only
+those reporting records without rerunning inference or touching sensor
+history. Exact retries are idempotent. A malformed, newer, equal-timestamp
+conflicting, or non-verifiable audit/feed is a **human review**, not a
+candidate for silent replacement. A new recorded Supervisor cycle refuses
+to start while the previous reporting record needs reconciliation.
+
+While the authorized synthetic browser demo Emulators are running:
+```bash
+python3 scripts/run_supervisor_demo_once.py --status          # read-only
+python3 scripts/run_supervisor_demo_once.py --repair-report   # explicit demo writes
+python3 scripts/run_supervisor_demo_once.py --status          # verify read-only
+```
+Only invoke `--repair-report` **after** checking an interrupted demo
+run and confirming you want to finish its existing private status. The
+command requires the same localhost/demo project restrictions and canonical
+pre-seeded synthetic fixture as the supervised run. It cannot recover an
+uncommitted inference, repair a corrupt audit, reset stale locks or migrate
+production data. `--preview` stays entirely read-only.
+
+Unit tests `tests/test_hardware_test_supervisor_recovery_v1.py` inject
+failures after private/feed writes and test idempotency, conflict refusal
+and no inference replay. The existing RTDB Emulator supervisor suite now
+tests reconciliation of the same failure window using real local RTDB
+transactions. These are prototype safety tests, not field-validated AI
+or an approved production deployment.
