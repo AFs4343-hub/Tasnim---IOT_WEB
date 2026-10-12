@@ -1,0 +1,374 @@
+{
+  "description": "Shared synthetic backend ingestion and browser read-only contract fixtures. No real measurements.",
+  "assumed_now_ms": 1791724621000,
+  "cases": [
+    {
+      "name": "canonical_complete",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "ACCEPT",
+      "web": "VALID"
+    },
+    {
+      "name": "rt_db_empty_flags_omitted",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52
+      },
+      "backend": "REJECT",
+      "web": "VALID"
+    },
+    {
+      "name": "missing_ph_flagged",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "PH_INVALID"
+        ]
+      },
+      "backend": "ACCEPT",
+      "web": "REVIEW"
+    },
+    {
+      "name": "missing_turb_flagged",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "rssi": -52,
+        "quality_flags": [
+          "TURB_INVALID_OR_MISSING"
+        ]
+      },
+      "backend": "ACCEPT",
+      "web": "REVIEW"
+    },
+    {
+      "name": "informational_quality_flag",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED"
+        ]
+      },
+      "backend": "ACCEPT",
+      "web": "VALID"
+    },
+    {
+      "name": "bad_ph_number",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": -50.9,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "PH_INVALID"
+        ]
+      },
+      "backend": "REJECT",
+      "web": "REVIEW"
+    },
+    {
+      "name": "saturated_turbidity",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 3000,
+        "rssi": -52,
+        "quality_flags": [
+          "TURB_SATURATED"
+        ]
+      },
+      "backend": "REJECT",
+      "web": "REVIEW"
+    },
+    {
+      "name": "missing_unflagged_tds",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REVIEW"
+    },
+    {
+      "name": "malformed_sample_id",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_bad!",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "empty_sample_id_suffix",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "wrong_node_identity",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N1",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "invalid_flag_code",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "ph_invalid"
+        ]
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "repeated_flags",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "PH_INVALID",
+          "PH_INVALID"
+        ]
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "extra_field",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [],
+        "calibration_claim": "certified"
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "wrong_rssi_type",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": "-52",
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "timestamp_seconds",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "timestamp_float",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000.5,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "more_than_twelve_flags",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "WARN_0",
+          "WARN_1",
+          "WARN_2",
+          "WARN_3",
+          "WARN_4",
+          "WARN_5",
+          "WARN_6",
+          "WARN_7",
+          "WARN_8",
+          "WARN_9",
+          "WARN_10",
+          "WARN_11",
+          "WARN_12"
+        ]
+      },
+      "backend": "REJECT",
+      "web": "REJECT"
+    },
+    {
+      "name": "boolean_ph",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": true,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": []
+      },
+      "backend": "REJECT",
+      "web": "REVIEW"
+    },
+    {
+      "name": "flagged_but_present",
+      "packet": {
+        "schema_version": 2,
+        "node_id": "N0",
+        "sample_id": "N0_1791724501000_3",
+        "timestamp": 1791724501000,
+        "sequence": 3,
+        "ph": 7.2,
+        "tds": 240,
+        "turbidity": 16,
+        "rssi": -52,
+        "quality_flags": [
+          "PH_INVALID"
+        ]
+      },
+      "backend": "ACCEPT",
+      "web": "REVIEW"
+    }
+  ]
+}

@@ -4,6 +4,14 @@ export const NODE_IDS = Object.freeze(['N0', 'N1', 'N2'])
 export const DATA_ROOT = 'hardware_test'
 export const SLOT_MS = 300_000
 const INFO_FLAGS = new Set(['BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED'])
+// Keep this schema synchronized with the Python V2 ingestion contract.
+// Database RTDB may omit ONLY an empty quality_flags array on retrieval.
+const PACKET_FIELDS = new Set([
+  'schema_version', 'node_id', 'sample_id', 'timestamp', 'sequence',
+  'ph', 'tds', 'turbidity', 'rssi', 'quality_flags',
+])
+const QUALITY_CODE = /^[A-Z][A-Z0-9_]{0,63}$/
+const SAMPLE_SUFFIX = /^[A-Za-z0-9_-]{1,80}$/
 const SENSOR_LIMITS = {
   ph: (x) => x >= 0 && x <= 14,
   tds: (x) => x >= 0 && x <= 5000,
@@ -32,20 +40,31 @@ export function nodeMeasurement(raw, expectedNode) {
       || !validEpoch(raw.timestamp)
       || typeof raw.sample_id !== 'string'
       || !raw.sample_id.startsWith(expectedNode + '_')
-      || !Number.isSafeInteger(raw.sequence) || raw.sequence < 0) {
+      || !SAMPLE_SUFFIX.test(raw.sample_id.slice(expectedNode.length + 1))
+      || !Number.isSafeInteger(raw.sequence) || raw.sequence < 0
+      || Object.keys(raw).some(key => !PACKET_FIELDS.has(key))
+      || (raw.rssi !== undefined
+          && (typeof raw.rssi !== 'number' || !Number.isFinite(raw.rssi)))) {
     return null
   }
 
-  // An empty array may be omitted by RTDB. Non-empty flags are never ignored.
+  // RTDB can drop an empty [] property. This exception is for READS only:
+  // sending a V2 packet to the gateway still requires quality_flags: [].
   const flags = raw.quality_flags === undefined ? [] : raw.quality_flags
-  if (!Array.isArray(flags) || !flags.every(f => typeof f === 'string')) return null
-  const requiresReview = flags.some(flag => !INFO_FLAGS.has(flag))
+  if (!Array.isArray(flags) || flags.length > 12
+      || !flags.every(f => typeof f === 'string' && QUALITY_CODE.test(f))
+      || new Set(flags).size !== flags.length) return null
+  const flagged = flags.some(flag => !INFO_FLAGS.has(flag))
   const values = {}
+  let incomplete = false
   for (const [key, valid] of Object.entries(SENSOR_LIMITS)) {
     const value = raw[key]
-    values[key] = !requiresReview && typeof value === 'number'
-      && Number.isFinite(value) && valid(value) ? value : null
+    const ok = typeof value === 'number' && Number.isFinite(value) && valid(value)
+    if (!ok) incomplete = true
+    // A flagged packet must not show any of its measurements as validated.
+    values[key] = !flagged && ok ? value : null
   }
+  const requiresReview = flagged || incomplete
 
   return {
     node_id: expectedNode,
@@ -73,7 +92,8 @@ export function historyRows(raw, limit = 60) {
   for (const [slotKey, entry] of Object.entries(raw)) {
     const slot = Number(slotKey)
     if (!Number.isSafeInteger(slot) || slot <= 0 || slot % SLOT_MS !== 0
-        || String(slot) !== slotKey || !entry || typeof entry !== 'object') continue
+        || String(slot) !== slotKey || !entry || typeof entry !== 'object'
+      || Array.isArray(entry)) continue
     const nodes = {}
     for (const node of NODE_IDS) {
       const parsed = nodeMeasurement(entry[node], node)

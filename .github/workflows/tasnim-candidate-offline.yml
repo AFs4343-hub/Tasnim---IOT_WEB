@@ -61,6 +61,7 @@ jobs:
             test_supervisor_demo_cli_guard.py \
             test_hardware_test_ingestion_core.py \
             test_hardware_test_contract_v2.py \
+            test_hardware_v2_cross_layer_contract.py \
             test_real_test_bridge_v2.py \
             test_security_rules_candidate_static.py \
             test_hardware_test_analysis_writer_v2.py \
@@ -79,7 +80,7 @@ jobs:
       - name: Install web dependencies and build
         run: |
           npm ci
-          node --test tests/test_hardware_v2_view.mjs tests/test_demo_mode_guards.mjs tests/test_demo_legacy_adapter.mjs tests/test_operational_monitor_demo.mjs
+          node --test tests/test_hardware_v2_view.mjs tests/test_hardware_v2_cross_layer_contract.mjs tests/test_demo_mode_guards.mjs tests/test_demo_legacy_adapter.mjs tests/test_operational_monitor_demo.mjs
           npm run build
 
       - name: Report limitations

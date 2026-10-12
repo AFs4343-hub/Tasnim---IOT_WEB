@@ -201,3 +201,27 @@ No action button is added to the browser. The trained model is NOT invoked:
 the one-shot predictor and initial checkpoint are synthetic fixtures.
 Never give public access to the emulator forwarded ports or paste LIVE
 Firebase credentials into the demo.
+
+
+## Shared V2 web/backend contract regression (before final firmware)
+
+The two read-only layers use the *same* synthetic, version-controlled
+fixtures in `tests/fixtures/hardware_v2_cross_layer_cases.json`. The
+backend test `tests/test_hardware_v2_cross_layer_contract.py` checks
+`check_ingestion_packet`; the independent JavaScript test
+`tests/test_hardware_v2_cross_layer_contract.mjs` checks website
+`nodeMeasurement`, `latestNodes` and `historyRows`.
+
+The website now refuses malformed `sample_id`, duplicate/invalid/too many
+quality flags, unknown packet fields, and malformed RSSI metadata. It marks
+incomplete or invalid sensor measurements for review and never substitutes
+missing measurements with numeric zero. Empty `quality_flags: []` is a
+**documented RTDB read exception only**: it may disappear after storage;
+it is still **required** by the backend's incoming packet contract.
+
+These tests are deliberately distinct from physical-calibration acceptance:
+all test numbers are synthetic, and flags/missing measurements do not prove
+the instrument is accurate. The existing `src/App.jsx` production website,
+`tasnim.config.json`, LIVE rules, physical firmware and field namespace
+remain unchanged. Run all offline web checks before any eventual device
+handoff or LIVE activation.
