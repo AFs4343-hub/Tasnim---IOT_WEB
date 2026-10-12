@@ -214,6 +214,23 @@ class IngestionOnRealEmulatorTests(unittest.TestCase):
             self.ingest(sample())
         self.assertEqual(self.read(path), {"timestamp": "corrupt"})
 
+    def test_14_newer_corrupt_latest_is_not_trusted_during_backfill(self):
+        path = "hardware_test/nodes/N0/latest"
+        for mutation in (
+            {"node_id": "N2"},
+            {"ph": -42},
+            {"schema_version": 99},
+            {"unexpected_meta": "bogus"},
+            {"timestamp": NOW_MS + 120_000},
+        ):
+            with self.subTest(mutation=mutation):
+                corrupt = sample(ts=TS + 300_000, seq=4)
+                corrupt.update(mutation)
+                db.reference(path, app=self.app).set(corrupt)
+                with self.assertRaises(LatestConflict):
+                    self.ingest(sample())
+                self.assertEqual(self.read(path), expected_in_rtdb(corrupt))
+
     def test_13_old_backfill_after_40_days(self):
         packet = sample()
         result = self.ingest(packet)

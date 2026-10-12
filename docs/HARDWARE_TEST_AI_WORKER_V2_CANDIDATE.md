@@ -366,3 +366,31 @@ complete/partial analysis archives, late backfill, source metadata changes,
 bad pointers, malformed markers, bounds, and no-write guarantees. The
 localhost RTDB Emulator worker suite independently verifies the read-only
 audit against real transactions.
+
+
+## Validation of newer latest pointers during delayed backfill (October 2026)
+
+A strictly newer timestamp is **not** enough to trust an already stored
+`/hardware_test/nodes/<node>/latest` value. Before allowing an older
+packet to preserve a newer pointer, the ingestion core now validates the
+stored pointer's complete V2 measurement schema, expected node identity,
+allowed metadata fields, normalized RTDB empty quality-flags representation,
+maximum payload size, and future clock bound against the **same** trusted
+ingestion time. An invalid pointer is retained unchanged and the operation
+raises `LatestConflict` for human review. The earlier history transaction
+may already have committed: this is not a two-path atomic operation.
+
+The AI analysis writer applies corresponding *canonical-record validation*
+before accepting a newer `/hardware_test/analysis/latest` checkpoint.
+Malformed model-stage/source/session metadata or extra fields now result in
+`AnalysisLatestConflict` instead of being labeled an acceptable older
+replay. Both code paths still preserve well-formed, strictly newer pointers
+during legitimate delayed backfill.
+
+This is **structural sanity**, not a cryptographic proof that a latest pointer
+matches an archived slot or that real measurements are accurate. The V2 AI
+worker separately verifies canonical source digests and archived checkpoints.
+The new offline synthetic test `tests/test_backend_latest_integrity_v1.py`
+and real localhost Emulator suites check corrupt newer pointers, replay
+semantics, failure-before-overwrite, and allowed RTDB normalization.
+No LIVE data is read or modified.

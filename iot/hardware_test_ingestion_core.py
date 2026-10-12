@@ -61,6 +61,33 @@ def stored_packet_matches(stored, packet):
     return False
 
 
+def valid_stored_latest(stored, *, node, now_ms=None):
+    """Stored pointer must pass the full V2 schema before trusting its clock.
+
+    RTDB may omit only an empty quality_flags array. Structural validation
+    does NOT prove the pointer equals archived history; that needs a separate
+    provenance check. Never overwrite malformed latest data automatically.
+    """
+    if type(stored) is not dict or stored.get("node_id") != node:
+        return False
+    if set(stored) - ALLOWED_FIELDS:
+        return False
+    timestamp = stored.get("timestamp")
+    if type(timestamp) is not int:
+        return False
+    if now_ms is not None and timestamp > now_ms + MAX_FUTURE_MS:
+        return False
+    restored = dict(stored)
+    restored.setdefault("quality_flags", [])
+    try:
+        # Check the packet's structure and size; do not reject a historically
+        # legitimate stored pointer because its acquisition clock is old.
+        check_ingestion_packet(restored, now_ms=timestamp)
+    except (ContractError, ValueError, OverflowError):
+        return False
+    return True
+
+
 def check_ingestion_packet(packet, *, now_ms=None):
     """Validate canonical measurement before persistence."""
 
@@ -122,9 +149,10 @@ def ingest_verified_packet(db, packet, *, now_ms=None):
     Caller must verify device identity before calling.
     """
 
+    reference_now = int(time.time() * 1000) if now_ms is None else now_ms
     slot = check_ingestion_packet(
         packet,
-        now_ms=now_ms,
+        now_ms=reference_now,
     )
 
     node = packet["node_id"]
@@ -154,10 +182,7 @@ def ingest_verified_packet(db, packet, *, now_ms=None):
         if old is None:
             return dict(packet)
 
-        if (
-            not isinstance(old, dict)
-            or type(old.get("timestamp")) is not int
-        ):
+        if not valid_stored_latest(old, node=node, now_ms=reference_now):
             return old
 
         if packet["timestamp"] > old["timestamp"]:
@@ -173,8 +198,7 @@ def ingest_verified_packet(db, packet, *, now_ms=None):
         state = "LATEST_CONFIRMED"
 
     elif (
-        isinstance(latest, dict)
-        and type(latest.get("timestamp")) is int
+        valid_stored_latest(latest, node=node, now_ms=reference_now)
         and latest["timestamp"] > packet["timestamp"]
     ):
         state = "OLDER_REPLAY_PRESERVED"

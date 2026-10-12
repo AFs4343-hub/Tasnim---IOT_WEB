@@ -141,6 +141,29 @@ def prepare_analysis_record(preview, *, model_version, inference_timestamp_ms):
     return record
 
 
+def valid_stored_latest_analysis(stored):
+    """Validate a stored latest pointer before trusting a newer slot.
+
+    Canonical metadata is a necessary check, not proof that this pointer
+    matches an archived history slot or a validated source digest.
+    """
+    if type(stored) is not dict:
+        return False
+    preview = {
+        key: value for key, value in stored.items()
+        if key not in ("model_version", "inference_timestamp_ms")
+    }
+    try:
+        normalized = prepare_analysis_record(
+            preview,
+            model_version=stored.get("model_version"),
+            inference_timestamp_ms=stored.get("inference_timestamp_ms"),
+        )
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return normalized == stored
+
+
 def commit_verified_analysis(db, record):
     """Transactionally archive one analysis and monotonically advance latest.
 
@@ -176,7 +199,7 @@ def commit_verified_analysis(db, record):
     def update_latest(previous):
         if previous is None:
             return dict(record)
-        if not isinstance(previous, dict) or type(previous.get("source_timestamp_ms")) is not int:
+        if not valid_stored_latest_analysis(previous):
             return previous
         if previous["source_timestamp_ms"] < slot:
             return dict(record)
@@ -186,8 +209,7 @@ def commit_verified_analysis(db, record):
     if current == record:
         state = "LATEST_CONFIRMED"
     elif (
-        isinstance(current, dict)
-        and type(current.get("source_timestamp_ms")) is int
+        valid_stored_latest_analysis(current)
         and current["source_timestamp_ms"] > slot
     ):
         state = "OLDER_ANALYSIS_PRESERVED"

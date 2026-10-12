@@ -169,6 +169,20 @@ class RealAnalysisEmulatorTests(unittest.TestCase):
         with self.assertRaises(AnalysisConflict):
             commit_verified_analysis(self.adapter, record(version="prototype-v2"))
 
+    def test_10_newer_corrupt_ai_pointer_refuses_older_write(self):
+        path = "hardware_test/analysis/latest"
+        for mutation in (
+            {"model_stage": "FIELD_VALIDATED"},
+            {"model_disagreement": "false"},
+            {"unexpected_debug": "bogus"},
+        ):
+            with self.subTest(mutation=mutation):
+                bad = {**record(SLOT + STEP), **mutation}
+                db.reference(path, app=self.app).set(bad)
+                with self.assertRaises(AnalysisLatestConflict):
+                    commit_verified_analysis(self.adapter, record(SLOT))
+                self.assertEqual(self.read(path), bad)
+
     def test_09_three_node_measurements_unchanged(self):
         before = self.read(f"hardware_test/history/{SLOT}/N0")
         commit_verified_analysis(self.adapter, record())

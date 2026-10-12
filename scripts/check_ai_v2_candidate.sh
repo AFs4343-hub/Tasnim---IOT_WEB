@@ -44,6 +44,7 @@ for pattern in \
   test_real_model_contract_cli.py \
   test_supervisor_demo_cli_guard.py \
   test_hardware_test_ingestion_core.py \
+  test_backend_latest_integrity_v1.py \
   test_hardware_test_contract_v2.py \
   test_hardware_v2_cross_layer_contract.py \
   test_real_test_bridge_v2.py \
