@@ -56,6 +56,8 @@ export function adaptEmulatorForLegacyDashboard(snapshot, limit = 60) {
     // Prototype AI mock is deliberately withheld from the legacy
     // AnomalyPanel, which otherwise might claim a scientific RF decision.
     analysis: null,
-    firebaseStatus: 'online',
+    // A failed demo refresh must never mark an empty placeholder 'online'.
+    firebaseStatus: ['connecting', 'error'].includes(snapshot?.demoConnectionState)
+      ? snapshot.demoConnectionState : 'online',
   }
 }

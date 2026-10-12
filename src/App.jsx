@@ -77,7 +77,8 @@ function App({ demoSnapshot } = {}) {
     setHasMoreHistory(next.hasMoreHistory)
     setAnalysis(next.analysis)
     setFirebaseStatus(next.firebaseStatus)
-    setLastUpdate(new Date())
+    // No invented "just updated" timestamp when the demo transport failed.
+    setLastUpdate(demoSnapshot?.demoConnectionState ? null : new Date())
   }, [demoSnapshot, historyLimit])
 
   // =========================================

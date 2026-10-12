@@ -3,14 +3,35 @@ import App from './App.jsx'
 import { historyRows, latestNodes } from './services/hardwareV2View'
 import HardwareV2QualitySummary from './components/HardwareV2QualitySummary'
 import OperationalMonitorDemo from './components/OperationalMonitorDemo'
+import { createDemoSnapshotPoller } from './services/demoSnapshotPolling.js'
 
 const USERS = ['admin', 'manager', 'viewer']
-const EMPTY_DEMO = Object.freeze({ nodes: null, history: null, analysis: null })
+const EMPTY_DEMO = Object.freeze({
+  nodes: null, history: null, analysis: null, demoConnectionState: 'connecting',
+})
+const FAILED_DEMO = Object.freeze({
+  nodes: null, history: null, analysis: null, demoConnectionState: 'error',
+})
 
-async function requestDemo(path, options) {
-  const response = await fetch('/__tasnim_demo__/' + path, { cache: 'no-store', ...options })
-  const result = await response.json()
-  if (!response.ok) throw Error(result.error || 'Emulator tidak tersedia.')
+async function requestDemo(path, options = {}) {
+  // Bound stalled requests; a session stop/logout also aborts the request.
+  const timeout = AbortSignal.timeout(12_000)
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeout]) : timeout
+  const response = await fetch('/__tasnim_demo__/' + path, {
+    cache: 'no-store', ...options, signal,
+  })
+  let result
+  try {
+    result = await response.json()
+  } catch {
+    throw Error('Respons Emulator tidak valid.')
+  }
+  if (!response.ok) {
+    const error = Error(result?.error || 'Emulator tidak tersedia.')
+    error.httpStatus = response.status
+    throw error
+  }
   return result
 }
 
@@ -25,20 +46,26 @@ export default function DemoHardwareV2() {
 
   useEffect(() => {
     if (!session) return
-    let active = true
-    const refresh = () => requestDemo('snapshot?limit=240', {
-      headers: { Authorization: 'Bearer ' + session.token },
-    }).then(data => {
-      if (active) { setSnapshot(data); setMessage('') }
-    }).catch(error => {
-      if (!active) return
-      setSnapshot(null)
-      setMessage(error.message)
-      if (/login|ditolak/i.test(error.message)) setSession(null)
+    const poller = createDemoSnapshotPoller({
+      load: signal => requestDemo('snapshot?limit=240', {
+        headers: { Authorization: 'Bearer ' + session.token }, signal,
+      }),
+      onSnapshot: data => { setSnapshot(data); setMessage('') },
+      onFailure: error => {
+        // On any failure, discard old data instead of claiming stale
+        // telemetry is still online. 401/403 also revoke the local session.
+        setSnapshot(null)
+        if ([401, 403].includes(error?.httpStatus)) {
+          setMessage('Sesi demo tidak diizinkan lagi. Silakan masuk kembali.')
+          setSession(null)
+        } else {
+          setMessage('Snapshot Emulator tidak tersedia atau tidak valid. '
+            + 'Periksa koneksi, lalu gunakan Refresh.')
+        }
+      },
     })
-    refresh()
-    const timer = setInterval(refresh, 30_000)
-    return () => { active = false; clearInterval(timer) }
+    poller.start()
+    return () => poller.stop()
   }, [session, reload])
 
   const readiness = useMemo(() => ({
@@ -55,6 +82,7 @@ export default function DemoHardwareV2() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
+      setSnapshot(null)
       setSession({ token: value.token, role: value.role })
       setPassword('')
     } catch (error) { setMessage(error.message) }
@@ -116,7 +144,8 @@ export default function DemoHardwareV2() {
     {/* Reuse the EXACT existing dashboard and its sections. In demo mode,
         App suppresses every LIVE Firebase listener and receives sanitized
         emulator data only. */}
-    <App demoSnapshot={session && snapshot ? snapshot : EMPTY_DEMO}/>
+    <App demoSnapshot={session && snapshot ? snapshot
+      : session && message ? FAILED_DEMO : EMPTY_DEMO}/>
 
     {!session && <div className="fixed inset-0 z-[3000] flex items-center justify-center overflow-y-auto bg-slate-950/85 p-4 backdrop-blur-sm">
       <section aria-label="Login demo TAS[N]IM"

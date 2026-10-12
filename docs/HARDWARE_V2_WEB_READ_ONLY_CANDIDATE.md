@@ -225,3 +225,34 @@ the instrument is accurate. The existing `src/App.jsx` production website,
 `tasnim.config.json`, LIVE rules, physical firmware and field namespace
 remain unchanged. Run all offline web checks before any eventual device
 handoff or LIVE activation.
+
+
+## Fail-closed snapshot polling and offline/recovery states (October 2026)
+
+The private Codespaces browser demo uses
+`src/services/demoSnapshotPolling.js` for at-most-one in-flight snapshot
+request per logged-in session. Polling stays at 30 seconds, with a 12-second
+fetch timeout. Manual Refresh or logout stops the previous poller and aborts
+its request; a late response from the previous session cannot update the
+new dashboard. The client accepts only the four expected snapshot fields
+(`nodes`, `history`, `analysis`, `operational_status`); an invalid,
+partial, or unexpected extra payload is rejected rather than rendered.
+
+Any failed fetch clears the previous readings and shows an explicit error
+rather than silently reusing stale values. Unauthorized 401/403 responses
+clear the demo session; transport outages retain the login so the next
+successful 30-second refresh may recover. The injected dashboard placeholder
+uses `firebaseStatus=connecting` during first load or logout and
+`firebaseStatus=error` on a failed refresh, rather than claiming `online`;
+the demo-only last-update display is cleared in these states. No path
+falls back to Firebase LIVE or changes the original production listener
+logic. The backend snapshot is composed of separate RTDB reads; this
+does NOT create an atomic multi-path snapshot.
+
+Unit coverage:
+`tests/test_demo_snapshot_polling.mjs` checks overlapping requests,
+network failure/recovery, invalid responses, stop/logout abort, and late
+previous-session responses. The existing legacy-adapter tests also verify
+the connecting/error/online presentation. The full Auth/RTDB Emulator
+acceptance remains separate, and physical device and scientific validity
+are not claimed by these tests.

@@ -63,3 +63,28 @@ test('empty and malformed inputs are handled without live database fallback', ()
   assert.equal(out.hasMoreHistory,false)
   assert.equal(out.analysis,null)
 })
+
+test('transport placeholder distinguishes connecting/error from online', () => {
+  const none = { nodes: null, history: null, analysis: null }
+  const loading = adaptEmulatorForLegacyDashboard({
+    ...none, demoConnectionState: 'connecting',
+  })
+  assert.equal(loading.firebaseStatus, 'connecting')
+  assert.equal(loading.history.length, 0)
+  assert.equal(loading.nodes.N0.ph, null)
+
+  const disconnected = adaptEmulatorForLegacyDashboard({
+    ...none, demoConnectionState: 'error',
+  })
+  assert.equal(disconnected.firebaseStatus, 'error')
+  assert.equal(disconnected.history.length, 0)
+  assert.equal(disconnected.analysis, null)
+
+  const restored = adaptEmulatorForLegacyDashboard({
+    nodes: { N0: { latest: node('N0') } },
+    history: { [s]: { N0: node('N0') } },
+    analysis: null, operational_status: null,
+  })
+  assert.equal(restored.firebaseStatus, 'online')
+  assert.equal(restored.nodes.N0.ph, 7.2)
+})
