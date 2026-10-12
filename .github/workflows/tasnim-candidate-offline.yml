@@ -73,6 +73,7 @@ jobs:
       - name: Install web dependencies and build
         run: |
           npm ci
+          node --test tests/test_hardware_v2_view.mjs
           npm run build
 
       - name: Report limitations

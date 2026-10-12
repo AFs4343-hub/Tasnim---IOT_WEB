@@ -56,6 +56,8 @@ firebase emulators:exec \
   --config firebase.emulator.security.json \
   "GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_ingestion_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_analysis_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_http_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_emulator.py' -v && node tests/test_security_rules_emulator.mjs"
 
+echo "=== WEBSITE HARDWARE V2 READ-ONLY CONTRACT ==="
+node --test tests/test_hardware_v2_view.mjs
 echo "=== WEBSITE BUILD ==="
 npm run build
 git diff --check
