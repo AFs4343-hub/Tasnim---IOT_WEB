@@ -10,6 +10,7 @@ from iot.hardware_test_ingestion_core import (
     HistoryConflict,
     LatestConflict,
     ingest_verified_packet,
+    stored_packet_matches,
 )
 
 TS = 1_791_724_501_000
@@ -74,6 +75,26 @@ class IngestionCoreTests(unittest.TestCase):
             packet,
             now_ms=NOW,
         )
+
+    def test_rtdb_omitted_empty_flags_matches(self):
+        packet = sample()
+        stored = dict(packet)
+        stored.pop("quality_flags")
+        self.assertTrue(stored_packet_matches(stored, packet))
+
+    def test_rtdb_nonempty_flags_must_not_disappear(self):
+        packet = sample(quality_flags=["PH_INVALID"])
+        packet.pop("ph")
+        stored = dict(packet)
+        stored.pop("quality_flags")
+        self.assertFalse(stored_packet_matches(stored, packet))
+
+    def test_rtdb_other_missing_fields_remain_conflicts(self):
+        packet = sample()
+        stored = dict(packet)
+        stored.pop("quality_flags")
+        stored.pop("tds")
+        self.assertFalse(stored_packet_matches(stored, packet))
 
     def test_first_packet_writes_both_paths(self):
         result = self.ingest(sample())
