@@ -79,6 +79,9 @@ try {
       status: 'NORMAL'
     });
     await set(ref(db, 'simulation/nodes/N0/latest'), sample);
+    await set(ref(db, 'gateway_state/nonces/N0/demoNonce'), {
+      fingerprint: 'synthetic-only'
+    });
   });
 
   console.log('=== REALTIME DATABASE EMULATOR ACCESS TEST ===');
@@ -159,7 +162,17 @@ try {
     assertFails(set(ref(viewer, 'simulation/nodes/N0/latest'), sample))
   );
 
-  console.log(`\n[PASS] ${passed}/18 emulator authorization tests`);
+  await check('Admin cannot read gateway nonce registry', () =>
+    assertFails(get(ref(admin, 'gateway_state/nonces/N0/demoNonce')))
+  );
+
+  await check('Device cannot write gateway nonce registry', () =>
+    assertFails(set(ref(device, 'gateway_state/nonces/N0/forgedNonce'), {
+      fingerprint: 'tampered'
+    }))
+  );
+
+  console.log(`\n[PASS] ${passed}/20 emulator authorization tests`);
   console.log('[INFO] Backend Admin SDK bypass is NOT tested here.');
   console.log('[INFO] ESP32 ingestion is NOT enabled by candidate Rules.');
 
