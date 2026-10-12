@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import App from './App.jsx'
 import { historyRows, latestNodes } from './services/hardwareV2View'
 import HardwareV2QualitySummary from './components/HardwareV2QualitySummary'
+import OperationalMonitorDemo from './components/OperationalMonitorDemo'
 
 const USERS = ['admin', 'manager', 'viewer']
 const EMPTY_DEMO = Object.freeze({ nodes: null, history: null, analysis: null })
@@ -94,6 +95,16 @@ export default function DemoHardwareV2() {
       </summary>
       <div className="mt-3">
         <HardwareV2QualitySummary nodes={readiness.nodes} rows={readiness.rows}/>
+      </div>
+    </details>}
+
+    {session && snapshot && <details className="mx-auto max-w-7xl px-4 pt-3">
+      <summary className="cursor-pointer text-sm text-cyan-300">
+        Lihat status AI Supervisor dan peringatan operasional (demo)
+      </summary>
+      <div className="mt-3">
+        <OperationalMonitorDemo nodes={readiness.nodes} rows={readiness.rows}
+          rawStatus={snapshot.operational_status}/>
       </div>
     </details>}
 

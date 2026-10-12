@@ -10,6 +10,9 @@ from ai.hardware_test_supervisor_v1 import (
 from ai.hardware_test_supervisor_status_v1 import (
     STATUS_PATH, make_supervisor_status, persist_supervisor_status,
 )
+from ai.hardware_test_supervisor_feed_v1 import (
+    FEED_PATH, publish_demo_supervisor_feed,
+)
 from ai.hardware_test_worker_lease_v2 import LEASE_PATH, RELEASED, acquire_exclusive_emulator_lock
 from test_hardware_test_worker_lease_v2 import LeaseFakeDB
 from test_hardware_test_worker_v2 import ENV, MODEL, prediction, three_slots
@@ -61,6 +64,8 @@ class SupervisorCandidateTests(unittest.TestCase):
         self.assertEqual(first["attempts"], 1)
         self.assertEqual(first["processed_count"], 2)
         self.assertTrue(first["status_persisted"])
+        self.assertTrue(first["feed_persisted"])
+        self.assertEqual(self.db.values[STATUS_PATH], self.db.values[FEED_PATH])
         self.assertEqual(self.db.values[LEASE_PATH], RELEASED)
         stored = self.db.values[STATUS_PATH]
         self.assertEqual(stored["state"], "PROCESSED")
@@ -70,6 +75,7 @@ class SupervisorCandidateTests(unittest.TestCase):
         second = self.cycle(predict_fn=lambda *_: self.fail("must not infer"))
         self.assertEqual(second["state"], "IDLE")
         self.assertFalse(second["status_persisted"])  # Same timestamp: no overwrite.
+        self.assertFalse(second["feed_persisted"])
         self.assertEqual(self.db.values[STATUS_PATH], stored)
 
     def test_transient_partial_latest_failure_recovers_on_bounded_retry(self):
@@ -96,6 +102,7 @@ class SupervisorCandidateTests(unittest.TestCase):
         self.assertEqual(report["attempts"], 2)
         self.assertNotIn("never-log-this", str(report))
         self.assertNotIn("never-log-this", str(self.db.values[STATUS_PATH]))
+        self.assertNotIn("never-log-this", str(self.db.values[FEED_PATH]))
 
     def test_held_lock_is_reported_without_writing_ai(self):
         acquire_exclusive_emulator_lock(self.db)
@@ -129,6 +136,22 @@ class SupervisorCandidateTests(unittest.TestCase):
         self.assertEqual(report["would_process_count"], 2)
         self.assertEqual(report["status_persisted"], False)
         self.assertEqual(self.db.values, {})
+
+    def test_feed_rejects_extra_keys_and_preserves_newer_status(self):
+        first = make_supervisor_status(state="IDLE", timestamp_ms=1234, attempts=1)
+        newer = make_supervisor_status(state="FAILED", timestamp_ms=1235,
+                                      attempts=1, error_code="WORKER_ERROR")
+        self.assertTrue(publish_demo_supervisor_feed(self.db, first))
+        self.assertTrue(publish_demo_supervisor_feed(self.db, newer))
+        self.assertFalse(publish_demo_supervisor_feed(self.db, first))
+        self.assertEqual(self.db.values[FEED_PATH], newer)
+        with self.assertRaises(ValueError):
+            publish_demo_supervisor_feed(self.db, {**newer, "password":"wrong"})
+        with self.assertRaises(ValueError):
+            publish_demo_supervisor_feed(
+                self.db, {**newer, "processed_count": True}
+            )
+        self.assertEqual(self.db.values[FEED_PATH], newer)
 
     def test_operational_status_timestamp_is_monotonic_and_bounded(self):
         old = make_supervisor_status(state="IDLE", timestamp_ms=1000, attempts=1)

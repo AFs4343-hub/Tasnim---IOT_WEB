@@ -122,12 +122,15 @@ export function createDemoBridgePlugin(env = process.env) {
           const count = Number.parseInt(new URL(req.url, 'http://localhost').searchParams.get('limit') || '60', 10)
           const limit = Math.max(1, Math.min(240, Number.isFinite(count) ? count : 60))
           try {
-            const [nodes, history, analysis] = await Promise.all([
+            const [nodes, history, analysis, operational_status] = await Promise.all([
               databaseRead('hardware_test/nodes', token, limit),
               databaseRead('hardware_test/history', token, limit),
               databaseRead('hardware_test/analysis/latest', token, limit),
+              // Public feed is a sanitized copy only. Never expose
+              // the private worker_state tree or privileged Admin API.
+              databaseRead('hardware_test/operations/supervisor/latest', token, limit),
             ])
-            return send(res, 200, { nodes, history, analysis })
+            return send(res, 200, { nodes, history, analysis, operational_status })
           } catch (error) {
             if (error.message === 'DENIED')
               return send(res, 403, { error: 'Akses ditolak oleh Firebase Rules Emulator.' })

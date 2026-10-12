@@ -57,6 +57,9 @@ test('browser demo login, same-origin snapshot, and read-only security', async (
       assert.equal(data.nodes?.N2?.latest?.node_id, 'N2')
       assert.ok(Object.keys(data.history || {}).length >= 3)
       assert.equal(data.analysis?.model_stage, 'PROTOTYPE_SIMULATION')
+      // Seeder does not pretend a supervisor has actually run.
+      assert.equal(data.operational_status, null)
+      assert.equal(Object.hasOwn(data, 'worker_state'), false)
 
       const write = await fetch(base + 'snapshot', {
         method: 'POST', headers: { Authorization: 'Bearer ' + session.token },

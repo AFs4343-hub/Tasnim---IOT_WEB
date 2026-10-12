@@ -12,6 +12,7 @@ from ai.hardware_test_supervisor_v1 import (
 from ai.hardware_test_supervisor_status_v1 import (
     STATUS_PATH, make_supervisor_status, persist_supervisor_status,
 )
+from ai.hardware_test_supervisor_feed_v1 import FEED_PATH
 from ai.hardware_test_worker_lease_v2 import (
     LEASE_PATH, RELEASED, acquire_exclusive_emulator_lock,
 )
@@ -67,6 +68,8 @@ class SupervisorDemoEmulatorTests(unittest.TestCase):
         self.assertEqual(first["state"], "PROCESSED")
         self.assertEqual(first["processed_count"], 2)
         self.assertTrue(first["status_persisted"])
+        self.assertTrue(first["feed_persisted"])
+        self.assertEqual(self.read(STATUS_PATH), self.read(FEED_PATH))
         self.assertEqual(self.read(STATUS_PATH)["state"], "PROCESSED")
         self.assertEqual(self.read(LEASE_PATH), RELEASED)
         second = self.cycle(
@@ -84,6 +87,7 @@ class SupervisorDemoEmulatorTests(unittest.TestCase):
         self.assertEqual(first["state"], "PREVIEW")
         self.assertEqual(first["status_persisted"], False)
         self.assertIsNone(self.read(STATUS_PATH))
+        self.assertIsNone(self.read(FEED_PATH))
         self.assertIsNone(self.read(LEASE_PATH))
         self.assertIsNone(self.read("hardware_test/analysis/latest"))
 
@@ -95,6 +99,7 @@ class SupervisorDemoEmulatorTests(unittest.TestCase):
         self.assertEqual(result["state"], "WAITING_LOCK")
         self.assertEqual(result["attempts"], 1)
         self.assertEqual(self.read(STATUS_PATH)["error_code"], "LEASE_BUSY")
+        self.assertEqual(self.read(FEED_PATH)["error_code"], "LEASE_BUSY")
         self.assertIsNone(self.read("hardware_test/analysis/latest"))
 
     def test_worker_error_is_classified_not_recorded_verbatim(self):
@@ -107,6 +112,7 @@ class SupervisorDemoEmulatorTests(unittest.TestCase):
         stored = self.read(STATUS_PATH)
         self.assertEqual(stored["error_code"], "WORKER_ERROR")
         self.assertNotIn("SUPER-PRIVATE", str(stored))
+        self.assertNotIn("SUPER-PRIVATE", str(self.read(FEED_PATH)))
         self.assertEqual(self.read(LEASE_PATH), RELEASED)
 
     def test_no_overwrite_newer_status_and_guard_refuses_production(self):

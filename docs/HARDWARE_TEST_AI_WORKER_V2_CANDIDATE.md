@@ -184,3 +184,23 @@ fenced leases, database pagination and deployment approval remain pending.
 CI and Codespaces suites now test both modules offline and in the real
 localhost Firebase Emulator. The production website retains `SIMULATION`
 by default and remains unchanged.
+
+
+## Sanitized browser-readable status mirror (demo only)
+
+The authoritative operational status remains
+`/worker_state/ai_v2_supervisor/latest` and is inaccessible through browser
+candidate Rules. After a supervisor successfully persists an authoritative
+record, `ai/hardware_test_supervisor_feed_v1.py` publishes its strictly
+validated, bounded status to
+`/hardware_test/operations/supervisor/latest`. The mirror has exactly the
+same allowlisted fields and no device measurements, credentials, model
+output or exception messages. An older or tied-timestamp status cannot
+overwrite a newer one. The duplicate writes are **not atomic together**;
+failures are surfaced through `feed_persisted` or an exception, never
+quietly treated as a successfully published state.
+
+The web display is opt-in, demo-only and read-only. It does NOT start a
+supervisor or seed fake successes. The actual demo workflow can therefore
+correctly show "Belum ada catatan Supervisor" until a trusted Emulator
+worker has explicitly run. No Firebase LIVE path or rule is altered.

@@ -147,3 +147,38 @@ and section markup remain in place.
 
 Verification: `node --test tests/test_demo_legacy_adapter.mjs`,
 `npm run build`, and the complete Codespaces demo/CI checks.
+
+
+## Collapsible demo-only Supervisor and delayed-data monitor (October 2026)
+
+The original website's `src/App.jsx` layout is **unchanged**.
+Only `src/DemoHardwareV2.jsx` adds a collapsed
+"Status AI Supervisor dan peringatan operasional" panel after login.
+All monitoring logic is read-only and runs in the browser; it never writes
+the Firebase database or sends notifications.
+
+The demo Vite bridge's existing authenticated `/snapshot` response now
+contains `operational_status`, read ONLY from
+`/hardware_test/operations/supervisor/latest`. This path is a whitelisted,
+strictly sanitized *copy* of the internal
+`/worker_state/ai_v2_supervisor/latest`. Browsers do NOT gain Admin
+access to worker_state; candidate RTDB Rules still deny browser writes.
+If the supervisor hasn't run on the current demo Emulator, the panel says
+no report has been recorded. **The demo seeder does not fake a successful
+supervisor run.**
+
+Alert policy is deliberately conservative: an uninitialized node is
+unknown, not offline; a still-open 5-minute slot is exempt; an incomplete
+slot receives an additional 5-minute grace period; *one* incomplete
+closed slot does not trigger an alarm; and two incomplete closed slots among
+the four latest considered slots become an engineering warning.
+A node with last valid acquisition older than 15 minutes gets a warning
+and older than 30 minutes requests review. Clock skew and invalid sensor
+flags request review. A waiting lock is not an alarm; recent FAILED,
+RETRY_EXHAUSTED or REVIEW_REQUIRED supervisor states request review,
+while historical/old reports do not cause an ongoing false alarm.
+No signal is a scientific claim that water is safe or unsafe.
+
+Tests: `tests/test_operational_monitor_demo.mjs`,
+`tests/test_demo_bridge_emulator.mjs`, and actual RTDB Emulator
+supervisor status-publisher tests.
