@@ -55,7 +55,7 @@ class CandidateReleaseGateStaticTests(unittest.TestCase):
         self.assertIn("DemoSlidingWindowLimiter()", gateway)
         self.assertIn("DEMO_RATE_LIMITED", gateway)
         self.assertIn("Lock()", policy)
-        self.assertIn("NOT production", design)
+        self.assertIn("target design, not a running service", design)
         self.assertIn("LIVE_DEPLOYMENT_BLOCKED", design)
         self.assertIn("multi-instance", design)
 
