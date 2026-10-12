@@ -43,6 +43,7 @@ jobs:
           assert prod["database"]["rules"] == "database.rules.json"
           emu = json.loads(Path("firebase.emulator.security.json").read_text())
           assert emu["emulators"]["database"] == {"host":"127.0.0.1","port":19003}
+          assert emu["emulators"]["auth"] == {"host":"127.0.0.1","port":19004}
           print("[PASS] SIMULATION, production Rules mapping, localhost demo target")
           PY
 

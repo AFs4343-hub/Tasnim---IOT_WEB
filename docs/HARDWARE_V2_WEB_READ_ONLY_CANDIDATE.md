@@ -59,10 +59,29 @@ rather than silently falling back to simulation or claiming healthy telemetry.
 - Completeness is *structural*. It is not sensor calibration proof.
 - The candidate uses a bounded recent-history window (60–240 records) and
   is not a full historical exporter or observation-session manager.
-- Real browser login and token refresh with an actual Firebase Auth user
-  still require a separate Auth Emulator/authorized staging acceptance test.
+- An Auth Emulator + RTDB Emulator automated integration check now exercises
+  actual email/password sign-in, token claims, and database permissions
+  through Firebase's web SDK. This is not a visual browser acceptance test:
+  UI rendering and refresh behavior with a real browser still require
+  a separate authorized staging/local check.
 - Browser auth login, role provisioning, and Rules deployment remain
   unapproved; no physical ESP32 validation is claimed.
+
+### Auth Emulator integration acceptance (new)
+
+The full Codespaces check now starts **both** Firebase Auth at
+`127.0.0.1:19004` and RTDB at `127.0.0.1:19003` with
+`GCLOUD_PROJECT=demo-tasnim-security`. A guarded Python script provisions
+synthetic email/password users and `tasnim_role` claims *only* in the Auth
+Emulator. A Node test uses the real Firebase Web Auth SDK to sign in, obtains
+actual emulator ID tokens, then reads/denies the same paths used by the
+hardware dashboard via the RTDB client SDK. A forced token refresh also
+checks that a revoked `viewer` claim disappears.
+
+This is **not** a real browser rendering test, not production account
+provisioning, and not a Firebase LIVE migration. Only a trusted backend may
+grant real custom claims. Test credentials are deterministic fakes valid only
+inside the emulator; never reuse them on production accounts.
 
 ## Verification
 
