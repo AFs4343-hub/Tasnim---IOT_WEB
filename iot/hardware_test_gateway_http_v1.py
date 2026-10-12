@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 from iot.hardware_test_contract_v2 import ContractError
+from iot.gateway_demo_rate_limit_v1 import DemoSlidingWindowLimiter
 from iot.hardware_test_gateway_auth_v1 import (
     DeviceAuthError, NonceConflict, accept_signed_measurement,
 )
@@ -56,8 +57,10 @@ def ingest_response(db, body, headers, secrets, *, now_ms=None):
     }
 
 
-def make_handler(db, secrets, *, clock_ms=None):
+def make_handler(db, secrets, *, clock_ms=None, rate_limiter=None):
     """Create a handler with a trusted database adapter and secret mapping."""
+    if type(rate_limiter) is not DemoSlidingWindowLimiter:
+        raise ValueError("demo_rate_limit:required")
     def now():
         return int(time.time() * 1000) if clock_ms is None else clock_ms()
 
@@ -101,6 +104,12 @@ def make_handler(db, secrets, *, clock_ms=None):
             parsed = urlsplit(self.path)
             if (parsed.path != POST_PATH or parsed.query or parsed.fragment):
                 self.respond(404, {"ok": False, "code": "NOT_FOUND"})
+                return
+            # One global loopback budget shared by all handler threads.
+            # Check BEFORE headers/body/signature and ALL RTDB transactions.
+            # Do not trust X-Forwarded-For or an unauthenticated node header.
+            if not rate_limiter.allow():
+                self.respond(429, {"ok": False, "code": "DEMO_RATE_LIMITED"})
                 return
 
             # No chunked transfer, multiple CL headers, or ambiguous headers.
@@ -160,13 +169,21 @@ def require_demo_adapter(db, secrets):
         raise RuntimeError("REFUSED: demo node keys must be distinct")
 
 
-def create_demo_server(db, secrets, *, port=0, clock_ms=None):
+def create_demo_server(
+    db, secrets, *, port=0, clock_ms=None, rate_limiter=None,
+):
     """Local-only HTTP server, with guard BEFORE opening a listening socket."""
     require_demo_adapter(db, secrets)
     if type(port) is not int or port < 0 or port > 65535:
         raise ValueError("port:invalid")
+    # The only optional override is another bounded limiter instance,
+    # primarily for deterministic tests; no 'disable rate limit' setting.
+    limiter = DemoSlidingWindowLimiter() if rate_limiter is None else rate_limiter
+    if type(limiter) is not DemoSlidingWindowLimiter:
+        raise ValueError("demo_rate_limit:invalid_limiter")
     return ThreadingHTTPServer(
-        (HOST, port), make_handler(db, secrets, clock_ms=clock_ms)
+        (HOST, port),
+        make_handler(db, secrets, clock_ms=clock_ms, rate_limiter=limiter),
     )
 
 

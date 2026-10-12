@@ -101,3 +101,26 @@ states `LIVE_DEPLOYMENT_BLOCKED` even when tests pass.
 The final firmware handoff is deferred until the tested software candidate
 is stable. It must be evaluated against the actual collaborator firmware
 later; no automatic firmware rewrite is authorized by this runbook.
+
+
+## 7. Loopback traffic-budget hardening and production gateway review
+
+The demo-only HTTP ingress now applies a **single-process**, thread-safe,
+sliding-window budget of 120 POST attempts per 60 seconds, returning
+HTTP `429 DEMO_RATE_LIMITED` before reading request bodies or writing
+to Emulator RTDB. This is deliberately global to the localhost HTTP
+server: client-supplied `X-Forwarded-For` and unsigned node IDs are NOT
+trusted as rate-limit identities. Health checks are not included.
+
+This is NOT production ingress throttling and cannot stop abuse across
+multiple replicas. Future public HTTPS must have separate shared source/IP
+pre-auth quotas, HMAC-authenticated per-node quotas and backpressure, and
+safe retry behavior. Key rotation/revocation and nonce garbage collection
+remain **unimplemented and deployment-blocking**. The design and
+required acceptance checks are specified in
+`docs/GATEWAY_PRODUCTION_ARCHITECTURE_DECISION_DRAFT.md`.
+
+Offline regression: `tests/test_gateway_demo_rate_limit_v1.py` checks
+concurrency, expiry, clock rollback and bounded policy. The real local
+HTTP smoke suite checks 429, spoofed forwarding headers, no-write
+denial and successful identical retry after the window resets.

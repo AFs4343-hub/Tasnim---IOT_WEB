@@ -110,3 +110,16 @@ Emulator job passed, and vice versa.
 5. **Last software stage:** compare the actual latest collaborator ESP32
    firmware against the contract and generate a targeted integration plan;
    do not invent an active firmware version from candidate sources.
+
+
+## Local candidate rate-limit guard and production decision
+
+On localhost Emulator, the signed HTTP demo gateway additionally enforces
+a shared, bounded, **120 POST / 60 s per-process** budget before
+body decoding or RTDB transactions. A 429 is a transient admission
+response; it is not an ingestion acknowledgement. The guard does NOT
+authenticate clients, rate-limit by physical node, protect a distributed
+deployment, implement actual key rotation or delete nonce records.
+See `docs/GATEWAY_PRODUCTION_ARCHITECTURE_DECISION_DRAFT.md` for the
+proposed HTTPS/HMAC/nonce/backup acceptance matrix. Production activation
+remains **BLOCKED**.

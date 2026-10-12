@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from iot.hardware_test_gateway_http_v1 import (
     create_demo_server, read_demo_secrets, require_demo_environment,
 )
+from iot.gateway_demo_rate_limit_v1 import DemoSlidingWindowLimiter
 from test_hardware_test_gateway_auth_v1 import KEYS, NOW, signed
 from test_hardware_test_ingestion_core import FakeDB, sample
 
@@ -242,6 +243,50 @@ class DemoGatewayHTTPTests(unittest.TestCase):
             self.assertEqual(self.db.values, {})
         finally:
             conn.close()
+
+    def test_18_bounded_loopback_rate_limit_returns_429_before_ingestion(self):
+        clock = [300.0]
+        limiter = DemoSlidingWindowLimiter(
+            max_requests=2, window_seconds=60, clock=lambda: clock[0],
+        )
+        server = create_demo_server(
+            self.db, KEYS, port=0, clock_ms=lambda: NOW, rate_limiter=limiter,
+        )
+        runner = threading.Thread(target=server.serve_forever, daemon=True)
+        runner.start()
+        try:
+            body, headers = signed(sample())
+            url = f"http://127.0.0.1:{server.server_port}/v1/measurements"
+            def call(extra_headers=None):
+                request = Request(url, data=body,
+                                  headers={**headers, **(extra_headers or {})},
+                                  method="POST")
+                try:
+                    with urlopen(request, timeout=5) as response:
+                        return response.status, json.loads(response.read())
+                except HTTPError as exc:
+                    try:
+                        return exc.code, json.loads(exc.read())
+                    finally:
+                        exc.close()
+            self.assertEqual(call()[0], 200)
+            self.assertEqual(call()[0], 200)
+            before = dict(self.db.values)
+            denied = call({"X-Forwarded-For": "fake-node.example.invalid"})
+            self.assertEqual(denied[0], 429)
+            self.assertEqual(denied[1]["code"], "DEMO_RATE_LIMITED")
+            self.assertEqual(self.db.values, before)
+            clock[0] = 360.0
+            self.assertEqual(call()[0], 200)
+            self.assertEqual(self.db.values, before)
+        finally:
+            server.shutdown()
+            server.server_close()
+            runner.join(timeout=2)
+
+    def test_19_cannot_bypass_limiter_with_unbounded_custom_policy(self):
+        with self.assertRaisesRegex(ValueError, "demo_rate_limit"):
+            create_demo_server(self.db, KEYS, port=0, rate_limiter=object())
 
     def test_14_demo_secrets_reject_duplicates(self):
         from unittest.mock import patch

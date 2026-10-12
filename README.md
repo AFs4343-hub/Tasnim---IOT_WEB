@@ -79,6 +79,7 @@ it must not be pointed at a public Firebase project.
 - [Security, nonce, backup and incident runbook](docs/CANDIDATE_SECURITY_OPERATIONS_RUNBOOK_20261012.md)
 - [AI V2 worker](docs/HARDWARE_TEST_AI_WORKER_V2_CANDIDATE.md)
 - [Signed gateway contract draft](docs/HARDWARE_TEST_SIGNED_GATEWAY_V1_DRAFT.md)
+- [HTTPS, rate limits, HMAC rotation and nonce GC architecture review](docs/GATEWAY_PRODUCTION_ARCHITECTURE_DECISION_DRAFT.md)
 - [Local HTTP Emulator runbook](docs/LOCAL_GATEWAY_HTTP_EMULATOR_RUNBOOK.md)
 - [Firmware handoff draft](docs/FIRMWARE_HANDOFF_V2_GATEWAY_CONTRACT_DRAFT.md)
 

@@ -62,6 +62,7 @@ for pattern in \
   test_hardware_test_preview_real_model.py \
   test_hardware_test_gateway_auth_v1.py \
   test_hardware_test_gateway_http_v1.py \
+  test_gateway_demo_rate_limit_v1.py \
   test_hmac_interop_v1.py
 do
   python3 -m unittest discover -s tests -p "$pattern" -v

@@ -47,6 +47,19 @@ class CandidateReleaseGateStaticTests(unittest.TestCase):
             self.assertIn("firmware", text.lower())
         self.assertIn("NOT", self.text("README.md"))
 
+    def test_local_gateway_throttle_is_not_misrepresented_as_public_security(self):
+        gateway = self.text("iot/hardware_test_gateway_http_v1.py")
+        policy = self.text("iot/gateway_demo_rate_limit_v1.py")
+        design = self.text("docs/GATEWAY_PRODUCTION_ARCHITECTURE_DECISION_DRAFT.md")
+        self.assertIn('HOST = "127.0.0.1"', gateway)
+        self.assertIn("DemoSlidingWindowLimiter()", gateway)
+        self.assertIn("DEMO_RATE_LIMITED", gateway)
+        self.assertIn("Lock()", policy)
+        self.assertIn("NOT production", design)
+        self.assertIn("LIVE_DEPLOYMENT_BLOCKED", design)
+        self.assertIn("multi-instance", design)
+
+
 
 if __name__ == "__main__":
     unittest.main()
