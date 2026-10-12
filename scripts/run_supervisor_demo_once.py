@@ -7,6 +7,7 @@ bash scripts/run_hardware_demo_codespaces.sh is running in terminal one.
   python3 scripts/run_supervisor_demo_once.py --preview  # NO DB writes
   python3 scripts/run_supervisor_demo_once.py --run      # demo ONLY; one cycle
   python3 scripts/run_supervisor_demo_once.py --status   # NO DB writes
+  python3 scripts/run_supervisor_demo_once.py --audit-checkpoints  # READ ONLY
   python3 scripts/run_supervisor_demo_once.py --repair-report
   # Explicit Emulator-only recovery of private status -> feed -> audit.
   # Does not rerun inference or modify measurement history.
@@ -128,6 +129,9 @@ def execute(mode):
     from firebase_admin import db
     from ai.hardware_test_supervisor_v1 import run_supervised_emulator_cycle
     from ai.hardware_test_supervisor_recovery_v1 import repair_demo_supervisor_reporting
+    from ai.hardware_test_checkpoint_integrity_v1 import (
+        CheckpointIntegrityReviewRequired, inspect_demo_checkpoints,
+    )
     from ai.hardware_test_supervisor_status_v1 import STATUS_PATH
     from ai.hardware_test_supervisor_feed_v1 import FEED_PATH
     from ai.hardware_test_supervisor_audit_v1 import (
@@ -151,6 +155,22 @@ def execute(mode):
     )
     try:
         adapter = LocalDemoAdapter(app)
+        if mode == "audit-checkpoints":
+            # No model, no transactions, no output of measurements or credentials.
+            try:
+                report = inspect_demo_checkpoints(
+                    adapter, session_id=SESSION, model_version=MODEL,
+                    max_source_slots=20,
+                )
+            except CheckpointIntegrityReviewRequired:
+                print(json.dumps({
+                    "state": "REVIEW_REQUIRED",
+                    "model_stage": "PROTOTYPE_SIMULATION",
+                    "read_only": True,
+                }, sort_keys=True))
+                return 2
+            print(json.dumps(report, sort_keys=True))
+            return 0
         if mode == "status":
             # Status-only read, no model or worker writes.
             private = adapter.reference(STATUS_PATH).get()
@@ -204,13 +224,16 @@ def main():
                        help="ONE supervised synthetic demo cycle (writes Emulator ONLY)")
     modes.add_argument("--status", action="store_true",
                        help="read-only status and browser feed check")
+    modes.add_argument("--audit-checkpoints", action="store_true",
+                       help="read-only V2 AI archive provenance check, no inference")
     modes.add_argument("--repair-report", action="store_true",
                        help="explicitly reconcile already-committed Emulator status only")
     args = parser.parse_args()
     return execute(
         "preview" if args.preview else
         "run" if args.run else
-        "repair-report" if args.repair_report else "status"
+        "repair-report" if args.repair_report else
+        "audit-checkpoints" if args.audit_checkpoints else "status"
     )
 
 

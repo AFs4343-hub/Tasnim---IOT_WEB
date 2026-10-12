@@ -9,6 +9,9 @@ from firebase_admin import db
 from ai.hardware_test_worker_v2 import (
     WorkerReviewRequired, run_emulator_cycle,
 )
+from ai.hardware_test_checkpoint_integrity_v1 import (
+    CheckpointIntegrityReviewRequired, inspect_demo_checkpoints,
+)
 from test_hardware_test_history_v2 import SLOT0, INTERVAL, slot
 from test_hardware_test_worker_v2 import prediction
 
@@ -117,6 +120,39 @@ class RealWorkerEmulatorTests(unittest.TestCase):
         self.assertEqual(second["recovered_slots"], [SLOT0+INTERVAL])
         self.assertEqual(second["processed_slots"], [SLOT0+2*INTERVAL])
         self.assertEqual(self.read(key), stored)
+
+    def test_05_read_only_integrity_audit_confirms_archived_model_provenance(self):
+        self.cycle()
+        with patch.dict(os.environ, {"TASNIM_AI_WORKER_EMULATOR_ONLY": "YES"}):
+            outcome = inspect_demo_checkpoints(
+                self.adapter, session_id="DEMO_WORKER_SESSION",
+                model_version="prototype-v1",
+            )
+        self.assertEqual(outcome["state"], "ALIGNED")
+        self.assertEqual(outcome["archived_count"], 2)
+        self.assertTrue(outcome["read_only"])
+        self.assertEqual(
+            self.read("hardware_test/analysis/latest")["source_timestamp_ms"],
+            SLOT0 + 2*INTERVAL,
+        )
+
+    def test_06_read_only_integrity_audit_detects_late_backfill(self):
+        db.reference(f"hardware_test/history/{SLOT0+INTERVAL}", app=self.app).delete()
+        db.reference(f"hardware_test/history/{SLOT0+3*INTERVAL}", app=self.app).set(
+            slot(SLOT0+3*INTERVAL)
+        )
+        self.cycle()
+        db.reference(f"hardware_test/history/{SLOT0+INTERVAL}", app=self.app).set(
+            slot(SLOT0+INTERVAL)
+        )
+        before = self.read("hardware_test/analysis/latest")
+        with patch.dict(os.environ, {"TASNIM_AI_WORKER_EMULATOR_ONLY": "YES"}):
+            with self.assertRaises(CheckpointIntegrityReviewRequired):
+                inspect_demo_checkpoints(
+                    self.adapter, session_id="DEMO_WORKER_SESSION",
+                    model_version="prototype-v1",
+                )
+        self.assertEqual(self.read("hardware_test/analysis/latest"), before)
 
     def test_04_preview_dry_run_has_no_emulator_writes(self):
         with patch.dict(os.environ, {"TASNIM_AI_WORKER_EMULATOR_ONLY": "YES"}):

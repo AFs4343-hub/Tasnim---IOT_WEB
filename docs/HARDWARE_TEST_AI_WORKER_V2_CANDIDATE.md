@@ -326,3 +326,43 @@ and no inference replay. The existing RTDB Emulator supervisor suite now
 tests reconciliation of the same failure window using real local RTDB
 transactions. These are prototype safety tests, not field-validated AI
 or an approved production deployment.
+
+
+## Explicit read-only provenance audit before future hardware integration
+
+`ai/hardware_test_checkpoint_integrity_v1.py` uses the **existing** V2
+canonical history planner, cumulative source SHA-256, and archived-marker
+validation. It is an independent, model-free, write-free assessment of the
+existing synthetic `/hardware_test/history` and
+`/hardware_test/analysis/latest`. It does **not** establish model
+quality, water safety, or field-calibrated sensor accuracy.
+
+For the pre-seeded private browser demo while both localhost Emulators are
+already running, execute:
+
+```bash
+python3 scripts/run_supervisor_demo_once.py --audit-checkpoints
+```
+
+Output is limited to sanitized states and counts:
+- `NO_CHECKPOINTS`: no archived AI result or pointer exists
+- `ALIGNED`: the latest pointer equals the highest verified archive
+- `REPAIRABLE_LATEST`: verified archived checkpoint exists, but the latest
+  pointer is absent or refers to another **verified older archive**
+- `REVIEW_REQUIRED`: archived hashes, source context, stored metadata,
+  or latest pointer are inconsistent; exit status 2 and **no write**
+
+`REPAIRABLE_LATEST` is a diagnosis, not authorization to modify the
+database. An actual worker recovery requires separate explicit
+Emulator-only execution and the existing lease/guard mechanisms.
+`--audit-checkpoints` never starts a worker, loads a model, resets a lock,
+changes calibration, fixes history, or writes any Firebase data.
+It is **not** the `--repair-report` option: that option reconciles
+separate private status / browser feed / audit reporting transactions.
+
+The standalone test
+`tests/test_hardware_test_checkpoint_integrity_v1.py` checks
+complete/partial analysis archives, late backfill, source metadata changes,
+bad pointers, malformed markers, bounds, and no-write guarantees. The
+localhost RTDB Emulator worker suite independently verifies the read-only
+audit against real transactions.
