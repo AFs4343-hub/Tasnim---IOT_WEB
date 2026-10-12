@@ -9,4 +9,5 @@ if [[ "${TASNIM_AUTH_TEST_EMULATOR_ONLY:-}" != "YES" ]] ||
   exit 1
 fi
 python3 tests/seed_hardware_auth_emulator.py
+node --test tests/test_demo_bridge_emulator.mjs
 node --test tests/test_hardware_auth_emulator.mjs

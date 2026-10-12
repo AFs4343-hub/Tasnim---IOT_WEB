@@ -9,10 +9,19 @@ import tasnimConfig from '../tasnim.config.json'
 const candidateEnabled = import.meta.env.VITE_TASNIM_HARDWARE_V2_PREVIEW === 'YES'
   && tasnimConfig.activeDataRoot === 'simulation'
   && tasnimConfig.mode === 'SIMULATION'
+const demoEnabled = import.meta.env.DEV && candidateEnabled
+  && import.meta.env.VITE_TASNIM_DEMO_LOGIN === 'YES'
 const HardwareV2Candidate = lazy(() => import('./HardwareV2Candidate.jsx'))
+const DemoHardwareV2 = lazy(() => import('./DemoHardwareV2.jsx'))
 
 function TasnimEntry() {
   const [view, setView] = useState('simulation')
+  if (demoEnabled) {
+    // Demo mode does not mount the LIVE-connected simulation dashboard.
+    return <Suspense fallback={<p className="p-6">Memuat demo…</p>}>
+      <DemoHardwareV2 />
+    </Suspense>
+  }
   return (
     <>
       {candidateEnabled && (

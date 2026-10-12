@@ -5,6 +5,7 @@ module import. Used only by scripts/test_hardware_auth_emulator.sh.
 """
 import os
 import sys
+import time
 
 DEMO_PROJECT = "demo-tasnim-security"
 AUTH_HOST = "127.0.0.1:19004"
@@ -24,16 +25,16 @@ def require_local_emulator():
         raise RuntimeError("REFUSED: Auth integration seed is local demo only")
 
 
-def sample(node):
+def sample(node, slot=SLOT, sequence=1):
     return {
         "schema_version": 2,
         "node_id": node,
-        "sample_id": f"{node}_{SLOT + 1000}_1",
-        "timestamp": SLOT + 1000,
-        "sequence": 1,
-        "ph": 7.0,
-        "tds": 210.0,
-        "turbidity": 12.0,
+        "sample_id": f"{node}_{slot + 1000}_{sequence}",
+        "timestamp": slot + 1000,
+        "sequence": sequence,
+        "ph": 7.0 + {"N0": 0, "N1": 0.15, "N2": -0.10}[node],
+        "tds": 210.0 + {"N0": 0, "N1": 30, "N2": 20}[node],
+        "turbidity": 12.0 + {"N0": 0, "N1": 2, "N2": 3}[node],
     }
 
 
@@ -76,16 +77,29 @@ def main():
             if claim is not None:
                 auth.set_custom_user_claims(uid, claim, app=app)
 
-        nodes = {n: sample(n) for n in ("N0", "N1", "N2")}
+        # Keep original fixed slot for reproducible API regression tests.
+        # Add three fresh synthetic slots for a useful browser demonstration.
+        now_slot = (int(time.time() * 1000) // 300_000) * 300_000
+        slots = [now_slot - 600_000, now_slot - 300_000, now_slot]
+        history = {str(SLOT): {n: sample(n) for n in ("N0", "N1", "N2")}}
+        for seq, slot in enumerate(slots, start=2):
+            packets = {n: sample(n, slot, seq) for n in ("N0", "N1", "N2")}
+            if seq == 3:
+                packets.pop("N2")  # Demonstrate missing history without fake zero.
+            history[str(slot)] = packets
+        nodes = {n: sample(n, slots[-1], 4) for n in ("N0", "N1", "N2")}
         db.reference("hardware_test", app=app).set({
             "nodes": {n: {"latest": packet} for n, packet in nodes.items()},
-            "history": {str(SLOT): nodes},
+            "history": history,
             "analysis": {
                 "latest": {
-                    "source_timestamp_ms": SLOT,
+                    "source_timestamp_ms": slots[-1],
                     "status": "NORMAL",
                     "data_source": "HARDWARE_TEST",
                     "model_stage": "PROTOTYPE_SIMULATION",
+                    "model_version": "SYNTHETIC_DEMO_ONLY",
+                    "session_id": "SYNTHETIC_BROWSER_DEMO",
+                    "model_disagreement": False,
                 }
             },
         })

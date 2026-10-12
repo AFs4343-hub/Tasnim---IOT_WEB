@@ -93,3 +93,34 @@ bash scripts/check_ai_v2_candidate.sh
 
 The last command includes current Python, Firebase Emulator, and build tests
 and must continue to work without a LIVE Firebase deployment.
+
+## Codespaces browser login with synthetic Emulator accounts
+
+Stop the earlier Vite terminal with Ctrl+C. Run the one-command demo:
+
+```bash
+bash scripts/run_hardware_demo_codespaces.sh
+```
+
+This checks the current branch and production config, starts Auth on
+`127.0.0.1:19004` and RTDB on `127.0.0.1:19003`, creates **synthetic**
+test-only accounts, seeds recent sensor data with one incomplete slot,
+and launches Vite on port `5173`. Keep this terminal running.
+In Codespaces PORTS set `5173` to **PRIVATE**, then click Open in Browser.
+Only port 5173 needs forwarding; the Emulators stay on loopback.
+
+Select `viewer@tasnim-auth-demo.invalid`, `manager@...` or
+`admin@...` on the demo login form. Password for all three is
+`EmulatorOnly_2026_Test!`.
+
+**Security:** The development-only `/__tasnim_demo__` route forwards
+same-origin browser login to the Auth Emulator and performs only three
+whitelisted RTDB reads with that token. The Firebase RTDB Emulator enforces
+candidate Rules. Tokens stay in browser memory and vanish on logout/reload.
+No LIVE Firebase credentials are used, no live dashboard is mounted,
+and this demo endpoint does not exist in the production build.
+Stop with Ctrl+C before resuming the normal website.
+
+The browser demo is a real Emulator login, but NOT a production release,
+an actual ESP32 measurement, or model scientific validation. Dashboard
+freshness/completeness indicators are engineering checks only.
