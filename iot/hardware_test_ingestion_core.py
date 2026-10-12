@@ -39,6 +39,28 @@ class LatestConflict(RuntimeError):
     pass
 
 
+def stored_packet_matches(stored, packet):
+    """Compare a stored RTDB measurement with a validated V2 packet.
+
+    Realtime Database omits an empty array property. Consequently, a
+    persisted valid packet with quality_flags=[] has no quality_flags key.
+    Only this one documented representation is treated as equivalent.
+    A nonempty flag list must remain present and match exactly.
+    """
+    if not isinstance(stored, dict):
+        return False
+    if stored == packet:
+        return True
+    if (
+        packet.get("quality_flags") == []
+        and "quality_flags" not in stored
+    ):
+        normalized = dict(stored)
+        normalized["quality_flags"] = []
+        return normalized == packet
+    return False
+
+
 def check_ingestion_packet(packet, *, now_ms=None):
     """Validate canonical measurement before persistence."""
 
@@ -123,7 +145,7 @@ def ingest_verified_packet(db, packet, *, now_ms=None):
         else old
     )
 
-    if history != packet:
+    if not stored_packet_matches(history, packet):
         raise HistoryConflict(
             f"history_conflict:{node}:{slot}"
         )
@@ -147,7 +169,7 @@ def ingest_verified_packet(db, packet, *, now_ms=None):
         latest_update
     )
 
-    if latest == packet:
+    if stored_packet_matches(latest, packet):
         state = "LATEST_CONFIRMED"
 
     elif (
