@@ -16,9 +16,7 @@ Exact UTF-8 request body **on one line, without a terminating LF**:
 {"node_id":"N0","ph":7.2,"quality_flags":[],"rssi":-49,"sample_id":"N0_1791724501000_3","schema_version":2,"sequence":3,"tds":240.0,"timestamp":1791724501000,"turbidity":16.0}
 ```
 
-Compute HMAC over:
-
-## Python check
+Verify the exact HMAC message and signature with Python:
 
 ```python
 import hashlib
