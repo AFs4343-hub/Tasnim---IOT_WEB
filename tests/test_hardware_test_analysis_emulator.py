@@ -132,7 +132,8 @@ class RealAnalysisEmulatorTests(unittest.TestCase):
         r = record()
         commit_verified_analysis(self.adapter, r)
         other = dict(r)
-        other["status"] = "ANOMALI"
+        other["random_forest"] = dict(r["random_forest"])
+        other["random_forest"]["confidence"] = 0.51
         with self.assertRaises(AnalysisConflict):
             commit_verified_analysis(self.adapter, other)
         self.assertEqual(self.read(f"hardware_test/history/{SLOT}/analysis"), r)
