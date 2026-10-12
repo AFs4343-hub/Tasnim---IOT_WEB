@@ -5,6 +5,7 @@ import {
 } from 'firebase/auth'
 import { ref, onValue, query, orderByKey, limitToLast } from 'firebase/database'
 import { firebaseApp, database } from './services/firebase'
+import HardwareV2QualitySummary from './components/HardwareV2QualitySummary'
 import {
   analysisStatus, getRoleFromClaims, historyRows, latestNodes, NODE_IDS, wita,
 } from './services/hardwareV2View'
@@ -116,6 +117,7 @@ function HardwarePanel({ role, onSignOut }) {
 
       {snapshot.state !== 'error' && (
         <>
+          <HardwareV2QualitySummary nodes={snapshot.latest} rows={snapshot.history} />
           <section className="grid gap-4 md:grid-cols-3" aria-label="Pengukuran terbaru per node">
             {NODE_IDS.map(node => {
               const measured = snapshot.latest?.[node]

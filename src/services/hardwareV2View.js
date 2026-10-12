@@ -119,3 +119,34 @@ export function wita(value) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   }) + ' WITA' : '—'
 }
+
+/**
+ * Dashboard field-readiness signals (engineering health, not water safety).
+ * Staleness is based on acquisition time, never the Firebase receive time.
+ */
+export function hardwareReadiness(nodes, rows, nowMs = Date.now()) {
+  const states = {}
+  const threshold = 10 * 60 * 1000
+  for (const node of NODE_IDS) {
+    const r = nodes?.[node]
+    if (!r) {
+      states[node] = 'NO_DATA'
+    } else if (!validEpoch(r.timestamp) || r.timestamp > nowMs + 60_000) {
+      states[node] = 'CLOCK_INVALID'
+    } else if (nowMs - r.timestamp > threshold) {
+      states[node] = 'STALE'
+    } else if (r.requiresReview || ['ph', 'tds', 'turbidity'].some(k => r[k] === null)) {
+      states[node] = 'REVIEW'
+    } else {
+      states[node] = 'RECENT'
+    }
+  }
+  const completeSlots = rows.filter(r => r.complete).length
+  return {
+    states,
+    recentNodes: NODE_IDS.filter(n => states[n] === 'RECENT').length,
+    totalSlots: rows.length,
+    completeSlots,
+    incompleteSlots: rows.length - completeSlots,
+  }
+}

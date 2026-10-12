@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  analysisStatus, canonicalSlot, getRoleFromClaims, historyRows, latestNodes,
+  analysisStatus, canonicalSlot, getRoleFromClaims, hardwareReadiness, historyRows, latestNodes,
   nodeMeasurement,
 } from '../src/services/hardwareV2View.js'
 
@@ -104,4 +104,33 @@ test('latest node converter never imports an analysis record as a sensor', () =>
   assert.equal(results.N0.node_id, 'N0')
   assert.equal(results.N1, null)
   assert.equal(results.N2, null)
+})
+
+test('hardware readiness distinguishes recent, stale, incomplete and missing nodes', () => {
+  const now = slot + 9 * 60_000
+  const row = historyRows({ [slot]: record() })
+  const latest = latestNodes({
+    N0: { latest: sample('N0', { timestamp: now - 60_000 }) },
+    N1: { latest: sample('N1', { timestamp: now - 11 * 60_000 }) },
+    N2: { latest: sample('N2', { timestamp: now - 60_000, ph: null }) },
+  })
+  const outcome = hardwareReadiness(latest, row, now)
+  assert.deepEqual(outcome.states, { N0: 'RECENT', N1: 'STALE', N2: 'REVIEW' })
+  assert.equal(outcome.recentNodes, 1)
+  assert.equal(outcome.completeSlots, 1)
+  assert.equal(hardwareReadiness({ N0: null }, [], now).states.N0, 'NO_DATA')
+  assert.equal(hardwareReadiness({
+    N0: { ...latest.N0, timestamp: now + 90_000 },
+  }, [], now).states.N0, 'CLOCK_INVALID')
+})
+
+test('history readiness counts incomplete slots but never invents measurements', () => {
+  const rows = historyRows({
+    [slot]: record(),
+    [slot + 300000]: record({ N2: null }),
+  })
+  const report = hardwareReadiness(null, rows, slot + 600000)
+  assert.equal(report.completeSlots, 1)
+  assert.equal(report.incompleteSlots, 1)
+  assert.equal(report.totalSlots, 2)
 })
