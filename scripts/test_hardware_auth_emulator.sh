@@ -12,6 +12,14 @@ python3 tests/seed_hardware_auth_emulator.py
 node --test tests/test_demo_bridge_emulator.mjs
 node --test tests/test_hardware_auth_emulator.mjs
 
+# Real CLI acceptance: synthetic seeded checkpoint -> read-only preview ->
+# one real bounded supervisor cycle -> authenticated browser status feed.
+# Run BEFORE unrelated worker unit suites reset the demo data root.
+python3 scripts/run_supervisor_demo_once.py --preview
+python3 scripts/run_supervisor_demo_once.py --run
+python3 scripts/run_supervisor_demo_once.py --status
+node --test tests/test_demo_supervisor_status_browser.mjs
+
 # Real database-emulator tests for worker retries, bounded dry-run and review gate.
 # Their setUp deletes ONLY the isolated demo hardware_test namespace.
 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_emulator.py' -v

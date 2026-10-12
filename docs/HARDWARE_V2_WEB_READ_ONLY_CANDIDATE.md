@@ -182,3 +182,22 @@ No signal is a scientific claim that water is safe or unsafe.
 Tests: `tests/test_operational_monitor_demo.mjs`,
 `tests/test_demo_bridge_emulator.mjs`, and actual RTDB Emulator
 supervisor status-publisher tests.
+
+
+## Viewing an actual synthetic supervisor cycle
+
+The demo's collapsible "Status AI Supervisor" panel starts without a fake
+success entry. While the browser demo is running in Codespaces terminal A,
+use terminal B and execute
+`python3 scripts/run_supervisor_demo_once.py --preview`,
+then the explicitly write-authorized
+`python3 scripts/run_supervisor_demo_once.py --run`.
+The panel refreshes from the browser's authenticated, read-only
+Emulator snapshot (approximately every 30 seconds).
+`python3 scripts/run_supervisor_demo_once.py --status` checks that the
+private and browser-visible status summaries match.
+
+No action button is added to the browser. The trained model is NOT invoked:
+the one-shot predictor and initial checkpoint are synthetic fixtures.
+Never give public access to the emulator forwarded ports or paste LIVE
+Firebase credentials into the demo.

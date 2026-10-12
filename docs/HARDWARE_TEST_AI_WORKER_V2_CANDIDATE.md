@@ -204,3 +204,45 @@ The web display is opt-in, demo-only and read-only. It does NOT start a
 supervisor or seed fake successes. The actual demo workflow can therefore
 correctly show "Belum ada catatan Supervisor" until a trusted Emulator
 worker has explicitly run. No Firebase LIVE path or rule is altered.
+
+
+## Trusted one-shot terminal trigger for local browser demo
+
+A command-line entrypoint `scripts/run_supervisor_demo_once.py` connects
+**only** to an already-running, pre-seeded local Firebase Auth + RTDB Emulator
+at `127.0.0.1:19004/19003`. It refuses wrong branches, modified production
+configuration, service-account credentials, wrong emulator endpoints,
+non-demo project values, or absent emulator ports before Firebase init.
+
+Run in a **second Codespaces terminal** after starting
+`bash scripts/run_hardware_demo_codespaces.sh` in the first one:
+
+```bash
+cd /workspaces/Tasnim---IOT_WEB
+python3 scripts/run_supervisor_demo_once.py --preview
+python3 scripts/run_supervisor_demo_once.py --run
+python3 scripts/run_supervisor_demo_once.py --status
+```
+
+`--preview` performs a true supervisor dry-run: no lock, analysis or
+status writes. `--run` explicitly runs **one** bounded, coordinated
+supervisor cycle, with at most three work actions and two retry attempts,
+and writes a sanitized private operational status and browser-facing
+read-only mirror. `--status` reads both status copies and reports whether
+they agree, without writing. There is NO web control or scheduled process
+that triggers computation.
+
+The seed has been corrected: the browser's synthesized
+`analysis/latest` now has a matching canonical archived history
+checkpoint and SHA-256 context digest, so the worker can validate its
+provenance and process other pending demo history without deleting any
+analysis record. All model labels and pseudo-confidence scores in the
+example remain a **deterministic synthetic test fixture** rather than
+outputs from a trained Random Forest or Isolation Forest model. This
+workflow does not scientifically validate the model or ESP32 sensors.
+
+Do NOT run the full `check_ai_v2_candidate.sh` pack while the browser
+demo is running: both suites use the same localhost Emulator ports.
+Tests cover `--preview`, one actual `--run`, `--status`, and a
+browser-role read of the sanitized feed, while browser reads of the
+privileged `worker_state` tree remain denied by candidate Rules.

@@ -6,12 +6,15 @@ module import. Used only by scripts/test_hardware_auth_emulator.sh.
 import os
 import sys
 import time
+from pathlib import Path
 
 DEMO_PROJECT = "demo-tasnim-security"
 AUTH_HOST = "127.0.0.1:19004"
 DB_HOST = "127.0.0.1:19003"
 DB_URL = f"http://{DB_HOST}/?ns={DEMO_PROJECT}-default-rtdb"
 TEST_PASSWORD = "EmulatorOnly_2026_Test!"
+DEMO_SUPERVISOR_SESSION = "SYNTHETIC_BROWSER_DEMO"
+DEMO_SUPERVISOR_MODEL = "SYNTHETIC_DEMO_ONLY"
 SLOT = 1_791_724_500_000
 
 
@@ -40,6 +43,7 @@ def sample(node, slot=SLOT, sequence=1):
 
 def main():
     require_local_emulator()  # Guard BEFORE any imports or network calls.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     if len(sys.argv) not in (1, 3):
         raise ValueError("usage: seed_hardware_auth_emulator.py [--set-viewer-role none|viewer]")
 
@@ -87,21 +91,39 @@ def main():
             if seq == 3:
                 packets.pop("N2")  # Demonstrate missing history without fake zero.
             history[str(slot)] = packets
+        # Seed a real, canonical *synthetic* checkpoint. The previous
+        # display-only analysis/latest lacked an archived history record and
+        # caused the guarded worker to (correctly) refuse every demo run.
+        # No ML inference: all labels are explicitly synthetic fixture data.
+        from ai.hardware_test_history_v2 import prepare_backlog
+        from ai.hardware_test_worker_v2 import context_digests
+        from ai.hardware_test_preview_v2 import annotate_preview
+        from ai.hardware_test_analysis_writer_v2 import prepare_analysis_record
+
+        plan = prepare_backlog(
+            history, session_id=DEMO_SUPERVISOR_SESSION,
+            expected_model_version=DEMO_SUPERVISOR_MODEL,
+        )
+        preview = annotate_preview({
+            "session_id": DEMO_SUPERVISOR_SESSION,
+            "status": "NORMAL",
+            "timestamp": "SYNTHETIC_DEMO_ONLY",
+            "location": None,
+            "random_forest": {"prediction": "NORMAL", "confidence": 0.55},
+            "isolation_forest": {"is_anomaly": False, "decision_score": 0.1},
+            "dominant_zscore": {"node": "N0", "parameter": "tds", "zscore": 0.2},
+        }, slot=slots[-1], time_mode=plan["time_mode"])
+        preview["source_digest_sha256"] = context_digests(history, plan)[slots[-1]]
+        latest_marker = prepare_analysis_record(
+            preview, model_version=DEMO_SUPERVISOR_MODEL,
+            inference_timestamp_ms=int(time.time() * 1000),
+        )
+        history[str(slots[-1])]["analysis"] = latest_marker
         nodes = {n: sample(n, slots[-1], 4) for n in ("N0", "N1", "N2")}
         db.reference("hardware_test", app=app).set({
             "nodes": {n: {"latest": packet} for n, packet in nodes.items()},
             "history": history,
-            "analysis": {
-                "latest": {
-                    "source_timestamp_ms": slots[-1],
-                    "status": "NORMAL",
-                    "data_source": "HARDWARE_TEST",
-                    "model_stage": "PROTOTYPE_SIMULATION",
-                    "model_version": "SYNTHETIC_DEMO_ONLY",
-                    "session_id": "SYNTHETIC_BROWSER_DEMO",
-                    "model_disagreement": False,
-                }
-            },
+            "analysis": {"latest": latest_marker},
         })
         db.reference("gateway_state/nonces/N0/test-only", app=app).set(
             {"fingerprint": "synthetic-only"}
