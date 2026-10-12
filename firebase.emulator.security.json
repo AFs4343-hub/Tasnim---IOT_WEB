@@ -1,0 +1,14 @@
+{
+  "database": {
+    "rules": "database.hardware_test.v2.candidate.rules.json"
+  },
+  "emulators": {
+    "database": {
+      "host": "127.0.0.1",
+      "port": 19003
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}
