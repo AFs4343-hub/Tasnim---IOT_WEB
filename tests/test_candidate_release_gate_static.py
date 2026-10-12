@@ -57,7 +57,7 @@ class CandidateReleaseGateStaticTests(unittest.TestCase):
         self.assertIn("Lock()", policy)
         self.assertIn("target design, not a running service", design)
         self.assertIn("LIVE_DEPLOYMENT_BLOCKED", design)
-        self.assertIn("multi-instance", design)
+        self.assertIn("multi-worker protection", design)
 
 
 
