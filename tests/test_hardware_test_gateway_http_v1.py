@@ -1,6 +1,7 @@
 """Real localhost HTTP smoke tests. FakeDB only; zero Firebase connections."""
 import http.client
 import json
+import socket
 import threading
 import unittest
 from urllib.error import HTTPError
@@ -39,7 +40,10 @@ class DemoGatewayHTTPTests(unittest.TestCase):
             with urlopen(req, timeout=5) as r:
                 return r.status, json.loads(r.read())
         except HTTPError as exc:
-            return exc.code, json.loads(exc.read())
+            try:
+                return exc.code, json.loads(exc.read())
+            finally:
+                exc.close()
 
     def test_01_health_and_unknown_path(self):
         status, result = self.request("/healthz", method="GET")
@@ -141,6 +145,53 @@ class DemoGatewayHTTPTests(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(RuntimeError):
                 require_demo_environment()
+
+    def test_15_partial_body_eof_rejected_without_database_write(self):
+        conn = http.client.HTTPConnection(
+            "127.0.0.1", self.server.server_port, timeout=6
+        )
+        try:
+            conn.putrequest("POST", "/v1/measurements")
+            conn.putheader("Content-Length", "10")
+            conn.endheaders(b"{}")
+            conn.sock.shutdown(socket.SHUT_WR)
+            resp = conn.getresponse()
+            self.assertEqual((resp.status, json.loads(resp.read())["code"]),
+                             (400, "BODY_INCOMPLETE"))
+            self.assertEqual(self.db.values, {})
+        finally:
+            conn.close()
+
+    def test_16_stalled_partial_body_times_out_without_database_write(self):
+        conn = http.client.HTTPConnection(
+            "127.0.0.1", self.server.server_port, timeout=6
+        )
+        try:
+            conn.putrequest("POST", "/v1/measurements")
+            conn.putheader("Content-Length", "10")
+            conn.endheaders(b"{")
+            resp = conn.getresponse()
+            self.assertEqual((resp.status, json.loads(resp.read())["code"]),
+                             (400, "BODY_INCOMPLETE"))
+            self.assertEqual(self.db.values, {})
+        finally:
+            conn.close()
+
+    def test_17_expect_continue_is_not_accepted(self):
+        conn = http.client.HTTPConnection(
+            "127.0.0.1", self.server.server_port, timeout=6
+        )
+        try:
+            conn.putrequest("POST", "/v1/measurements")
+            conn.putheader("Content-Length", "2")
+            conn.putheader("Expect", "100-continue")
+            conn.endheaders()
+            resp = conn.getresponse()
+            self.assertEqual((resp.status, json.loads(resp.read())["code"]),
+                             (417, "EXPECTATION_FAILED"))
+            self.assertEqual(self.db.values, {})
+        finally:
+            conn.close()
 
     def test_14_demo_secrets_reject_duplicates(self):
         from unittest.mock import patch

@@ -74,7 +74,10 @@ def main(argv=None):
         with urlopen(req, timeout=15) as response:
             status, payload = response.status, json.loads(response.read())
     except HTTPError as exc:
-        status, payload = exc.code, json.loads(exc.read())
+        try:
+            status, payload = exc.code, json.loads(exc.read())
+        finally:
+            exc.close()
     print("Demo response HTTP:", status)
     print(json.dumps(payload, sort_keys=True))
 

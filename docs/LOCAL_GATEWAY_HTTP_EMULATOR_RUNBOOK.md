@@ -78,11 +78,19 @@ production HTTPS server.
 - 401 `UNAUTHORIZED`: auth/signature/request clock problem.
 - 409 `CONFLICT_REVIEW_REQUIRED`: nonce, history, or latest collision;
   investigate, do not silently drop the queued measurement.
+- 400 `INVALID_HEADERS` / `INVALID_LENGTH` / `BODY_INCOMPLETE`:
+  malformed, truncated or stalled request; **no ACK**.
 - 411 `LENGTH_REQUIRED`, 413 `PAYLOAD_TOO_LARGE`: malformed HTTP.
+- 417 `EXPECTATION_FAILED`: demo rejects `Expect: 100-continue` without
+  reading a body; resend without that header, **not** as an accepted sample.
 - 422 `INVALID_MEASUREMENT`: invalid V2 packet.
 - 503 `RETRY_LATER`: backend temporarily failed. Retry same packet.
 - HTTP timeout/network failure: **unknown** whether server committed data;
   retry the exact measurement.
+
+The localhost demo bounds stalled request header/body reads to **2 seconds**.
+This limit is only an emulator test safety guard, **not** a production timeout
+policy or protection against all denial-of-service scenarios.
 
 Future production prerequisites: approved domain, trusted TLS termination,
 edge rate limits, secret storage/rotation, nonce expiry and retention

@@ -65,7 +65,10 @@ class RealHTTPGatewayEmulatorTests(unittest.TestCase):
             with urlopen(req, timeout=10) as response:
                 return response.status, json.loads(response.read())
         except HTTPError as exc:
-            return exc.code, json.loads(exc.read())
+            try:
+                return exc.code, json.loads(exc.read())
+            finally:
+                exc.close()
 
     def read(self, path):
         return db.reference(path, app=self.app).get()

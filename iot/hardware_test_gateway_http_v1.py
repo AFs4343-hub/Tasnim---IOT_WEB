@@ -26,6 +26,8 @@ HOST = "127.0.0.1"
 EMULATOR_HOST = "127.0.0.1:19003"
 DEMO_PROJECT = "demo-tasnim-security"
 POST_PATH = "/v1/measurements"
+# Demo-only bound time for reading HTTP headers and bodies. Not an SLA.
+REQUEST_READ_TIMEOUT_SECONDS = 2.0
 
 
 def ingest_response(db, body, headers, secrets, *, now_ms=None):
@@ -63,6 +65,16 @@ def make_handler(db, secrets, *, clock_ms=None):
         protocol_version = "HTTP/1.1"
         server_version = "TASNIM-Gateway-Demo"
         sys_version = ""
+
+        def setup(self):
+            super().setup()
+            # Limit idle or partial HTTP headers/bodies on each connection.
+            self.connection.settimeout(REQUEST_READ_TIMEOUT_SECONDS)
+
+        def handle_expect_100(self):
+            # Never accept an unvalidated body with an interim 100 response.
+            self.respond(417, {"ok": False, "code": "EXPECTATION_FAILED"})
+            return False
 
         def log_message(self, fmt, *args):
             # Do not log signatures, query strings or sensor values.
