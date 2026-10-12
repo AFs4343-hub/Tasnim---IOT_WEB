@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from ai.hardware_test_worker_lease_v2 import (
-    LEASE_PATH, WorkerLeaseBusy, WorkerLeaseOwnershipLost,
+    LEASE_PATH, RELEASED, WorkerLeaseBusy, WorkerLeaseOwnershipLost,
     acquire_exclusive_emulator_lock, release_exclusive_emulator_lock,
     run_exclusive_emulator_cycle,
 )
@@ -75,7 +75,7 @@ class WorkerLeaseTests(unittest.TestCase):
             release_exclusive_emulator_lock(self.db, owner_id="f" * 32)
         self.assertEqual(self.db.values[LEASE_PATH], saved)
         release_exclusive_emulator_lock(self.db, owner_id=first)
-        self.assertNotIn(LEASE_PATH, self.db.values)
+        self.assertEqual(self.db.values.get(LEASE_PATH), RELEASED)
         with self.assertRaises(WorkerLeaseOwnershipLost):
             release_exclusive_emulator_lock(self.db, owner_id=first)
         other = acquire_exclusive_emulator_lock(self.db)
@@ -98,17 +98,17 @@ class WorkerLeaseTests(unittest.TestCase):
             SLOT0 + INTERVAL, SLOT0 + 2 * INTERVAL,
         ])
         self.assertEqual(report["coordination"], "DEMO_EXCLUSIVE_SINGLE_FLIGHT")
-        self.assertNotIn(LEASE_PATH, self.db.values)
+        self.assertEqual(self.db.values.get(LEASE_PATH), RELEASED)
 
     def test_failure_releases_lock_and_checkpoint_recovers(self):
         self.db.fail_once_path = "hardware_test/analysis/latest"
         with self.assertRaises(ConnectionError):
             self.cycle()
-        self.assertNotIn(LEASE_PATH, self.db.values)
+        self.assertEqual(self.db.values.get(LEASE_PATH), RELEASED)
         report = self.cycle()
         self.assertEqual(report["recovered_slots"], [SLOT0 + INTERVAL])
         self.assertEqual(report["processed_slots"], [SLOT0 + 2 * INTERVAL])
-        self.assertNotIn(LEASE_PATH, self.db.values)
+        self.assertEqual(self.db.values.get(LEASE_PATH), RELEASED)
 
     def test_dry_run_makes_no_lock_or_history_writes(self):
         report = self.cycle(

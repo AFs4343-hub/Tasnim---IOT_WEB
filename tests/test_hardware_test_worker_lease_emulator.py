@@ -7,7 +7,7 @@ import firebase_admin
 from firebase_admin import db
 
 from ai.hardware_test_worker_lease_v2 import (
-    LEASE_PATH, WorkerLeaseBusy, WorkerLeaseOwnershipLost,
+    LEASE_PATH, RELEASED, WorkerLeaseBusy, WorkerLeaseOwnershipLost,
     acquire_exclusive_emulator_lock, release_exclusive_emulator_lock,
     run_exclusive_emulator_cycle,
 )
@@ -82,10 +82,10 @@ class ExclusiveWorkerDatabaseTests(unittest.TestCase):
             release_exclusive_emulator_lock(self.adapter, owner_id="0"*32)
         self.assertEqual(self.read(LEASE_PATH), existing)
         release_exclusive_emulator_lock(self.adapter, owner_id=first)
-        self.assertIsNone(self.read(LEASE_PATH))
+        self.assertEqual(self.read(LEASE_PATH), RELEASED)
         result = self.cycle()
         self.assertEqual(result["processed_slots"], [SLOT0+INTERVAL, SLOT0+2*INTERVAL])
-        self.assertIsNone(self.read(LEASE_PATH))
+        self.assertEqual(self.read(LEASE_PATH), RELEASED)
         self.assertIsNotNone(self.read("hardware_test/analysis/latest"))
 
     def test_dry_run_does_not_even_create_a_lock(self):
@@ -102,7 +102,7 @@ class ExclusiveWorkerDatabaseTests(unittest.TestCase):
             self.cycle(predict_fn=lambda frame, bundle: (
                 _ for _ in ()
             ).throw(ValueError("synthetic prediction failure")))
-        self.assertIsNone(self.read(LEASE_PATH))
+        self.assertEqual(self.read(LEASE_PATH), RELEASED)
         self.assertIsNone(self.read("hardware_test/analysis/latest"))
 
 

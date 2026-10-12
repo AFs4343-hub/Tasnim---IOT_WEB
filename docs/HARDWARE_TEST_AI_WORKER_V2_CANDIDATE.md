@@ -109,8 +109,11 @@ The cooperative lock lives exclusively at
 `/worker_state/ai_v2_exclusive`. A Firebase RTDB transaction claims it
 only when absent, with a random 128-bit owner token. A second cooperating
 worker receives `WorkerLeaseBusy` and **does not infer or commit**.
-After normal completion or a Python exception, a transaction clears the
-lock **only when the original owner matches**. A wrong owner receives
+After normal completion or a Python exception, a transaction writes an
+owner-free `{"state":"RELEASED"}` tombstone **only when the original
+owner matches** (Firebase Admin SDK rejects `None` as a transaction value).
+Only an absent slot or exactly this tombstone can be claimed again.
+A wrong owner receives
 `WorkerLeaseOwnershipLost`; a stale lock is never expired or stolen.
 A dry run bypasses lock writes and preserves the zero-write guarantee.
 
