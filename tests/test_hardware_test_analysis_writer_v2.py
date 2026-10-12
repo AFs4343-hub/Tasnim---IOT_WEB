@@ -166,6 +166,13 @@ class CandidateAnalysisWriterTests(unittest.TestCase):
             prepare_analysis_record(bad, model_version="v1",
                                     inference_timestamp_ms=S0 + 1)
 
+    def test_invalid_source_digest_format_refused(self):
+        bad = preview()
+        bad["source_digest_sha256"] = "not-64-hex"
+        with self.assertRaises(ValueError):
+            prepare_analysis_record(bad, model_version="v1",
+                                    inference_timestamp_ms=S0 + 1)
+
     def test_invalid_slot_rejected(self):
         bad = preview(S0 + 1)
         with self.assertRaises(ValueError):
