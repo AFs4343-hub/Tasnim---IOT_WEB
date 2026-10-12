@@ -44,7 +44,7 @@ jobs:
       - name: Install local test-only dependencies
         run: |
           npm ci
-          python -m pip install firebase-admin
+          python -m pip install firebase-admin pandas
           npm install --global firebase-tools@15.1.0
 
       - name: Assert demo isolation before starting emulators
@@ -63,7 +63,7 @@ jobs:
           print('[SAFE] explicit localhost demo project, Rules candidate only')
           PY
 
-      - name: Exercise real Auth emulator JWT and RTDB Rules
+      - name: Exercise real Auth/RTDB and prototype worker integration
         run: |
           firebase emulators:exec \
             --only database,auth \
@@ -73,5 +73,5 @@ jobs:
 
       - name: Record scope
         run: |
-          echo '[PASS] Web SDK Auth + RTDB demo integration'
+          echo '[PASS] Web SDK Auth + RTDB + AI worker demo integration'
           echo '[SAFE] No LIVE Firebase deploy, no production secrets, no firmware changes'

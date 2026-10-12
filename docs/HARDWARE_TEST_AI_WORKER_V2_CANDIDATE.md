@@ -40,8 +40,10 @@ Existing V2 records without this field remain usable by legacy code, but are
 
 ## How to test
 
-CI runs `test_hardware_test_worker_v2.py` without any database connection.
-Codespaces runs the full test script with a localhost Firebase Emulator:
+CI runs `test_hardware_test_worker_v2.py` without any database connection,
+and the separate demo-Emulator workflow also runs
+`test_hardware_test_worker_emulator.py` against localhost RTDB after
+the Auth integration checks. Codespaces can run the full script:
 
 ```bash
 bash scripts/check_ai_v2_candidate.sh
