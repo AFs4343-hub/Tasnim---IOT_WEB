@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = ROOT / "ai/models/tasnim_ai_bundle.joblib"
@@ -100,6 +101,20 @@ def check_bundle(bundle, predict_fn):
     }
 
 
+def load_local_predictor():
+    """Make the repo package importable when invoked as scripts/<file>.py.
+
+    In script mode Python puts the scripts/ directory on sys.path, not the
+    repository root. This must not depend on PYTHONPATH in Codespaces.
+    Import happens only after guard_local_model() authorizes the environment.
+    """
+    root_path = str(ROOT)
+    if root_path not in sys.path:
+        sys.path.insert(0, root_path)
+    from ai.predict import predict_latest
+    return predict_latest
+
+
 def main():
     parser = argparse.ArgumentParser(description="TASNIM trusted local model compatibility")
     parser.add_argument("--check", required=True, action="store_true",
@@ -108,7 +123,7 @@ def main():
     guard_local_model()
     # Import only after all guards. joblib deserialization is trusted-local only.
     import joblib
-    from ai.predict import predict_latest
+    predict_latest = load_local_predictor()
     artifact_digest = hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()[:12]
     bundle = joblib.load(MODEL_PATH)
     result = check_bundle(bundle, predict_latest)

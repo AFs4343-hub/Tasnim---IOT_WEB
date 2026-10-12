@@ -1,5 +1,6 @@
 """Pure offline checks for real-model smoke runner (bundle not present in CI)."""
 import os
+import subprocess
 from pathlib import Path
 import sys
 import unittest
@@ -19,6 +20,26 @@ class ModelSmokeContractTests(unittest.TestCase):
         self.assertEqual(result["firebase_reads"], 0)
         self.assertEqual(result["firebase_writes"], 0)
         self.assertIs(result["field_accuracy_tested"], False)
+
+    def test_python_script_import_succeeds_without_pythonpath(self):
+        # -I ignores PYTHONPATH and cwd imports. This reproduces the
+        # Codespaces ModuleNotFoundError without loading any model artifact.
+        source = (
+            "import importlib.util, sys; "
+            f"path={str(ROOT / 'scripts/check_real_model_contract.py')!r}; "
+            "spec=importlib.util.spec_from_file_location('model_smoke_script',path); "
+            "module=importlib.util.module_from_spec(spec); "
+            "spec.loader.exec_module(module); "
+            "assert callable(module.load_local_predictor())"
+        )
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", source],
+            cwd=ROOT, env=env, capture_output=True, text=True,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_nondeterministic_predictor_fails_instead_of_claiming_validation(self):
         calls = [0]
