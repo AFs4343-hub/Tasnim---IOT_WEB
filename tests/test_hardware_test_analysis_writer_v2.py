@@ -145,6 +145,20 @@ class CandidateAnalysisWriterTests(unittest.TestCase):
             commit_verified_analysis(self.db, altered)
         self.assertEqual(self.db.values, {})
 
+    def test_rf_status_mismatch_rejected(self):
+        bad = preview()
+        bad["status"] = "ANOMALI"
+        with self.assertRaises(ValueError):
+            prepare_analysis_record(bad, model_version="v1",
+                                    inference_timestamp_ms=S0 + 1)
+
+    def test_disagreement_mismatch_rejected(self):
+        bad = preview()
+        bad["model_disagreement"] = False
+        with self.assertRaises(ValueError):
+            prepare_analysis_record(bad, model_version="v1",
+                                    inference_timestamp_ms=S0 + 1)
+
     def test_wrong_source_rejected(self):
         bad = preview()
         bad["data_source"] = "simulation"
