@@ -10,6 +10,7 @@ import {
 
 import { database } from './services/firebase'
 import tasnimConfig from '../tasnim.config.json'
+import { adaptEmulatorForLegacyDashboard } from './services/demoLegacyAdapter.js'
 import IoTPerformancePanel from './components/IoTPerformancePanel'
 import TrendChart from './components/TrendChart'
 import NodeCard from './components/NodeCard'
@@ -25,7 +26,7 @@ import ConnectionStateBanner from './components/ConnectionStateBanner'
 
 const DATA_ROOT = tasnimConfig.activeDataRoot
 
-function App() {
+function App({ demoSnapshot } = {}) {
 
   // =========================================
   // STATE FIREBASE
@@ -66,6 +67,19 @@ function App() {
     useState(Date.now())
 
 
+  // The original dashboard can receive emulator-only data in demo mode.
+  // All LIVE database subscriptions below are disabled when it is provided.
+  useEffect(() => {
+    if (demoSnapshot === undefined) return
+    const next = adaptEmulatorForLegacyDashboard(demoSnapshot, historyLimit)
+    setNodes(next.nodes)
+    setHistory(next.history)
+    setHasMoreHistory(next.hasMoreHistory)
+    setAnalysis(next.analysis)
+    setFirebaseStatus(next.firebaseStatus)
+    setLastUpdate(new Date())
+  }, [demoSnapshot, historyLimit])
+
   // =========================================
   // TIMER STATUS NODE
   // =========================================
@@ -87,6 +101,7 @@ function App() {
   // =========================================
 
   useEffect(() => {
+    if (demoSnapshot !== undefined) return
 
     const nodesRef = ref(database, `${DATA_ROOT}/nodes`)
 
@@ -261,7 +276,7 @@ function App() {
 
     return () => unsubscribe()
 
-  }, [])
+  }, [demoSnapshot])
 
 
 
@@ -270,6 +285,7 @@ function App() {
   // =========================================
 
   useEffect(() => {
+    if (demoSnapshot !== undefined) return
 
     // Ambil 60 timestamp terakhir
     const historyRef = query(
@@ -470,7 +486,7 @@ function App() {
 
     return () => unsubscribe()
 
-  }, [historyLimit])
+  }, [historyLimit, demoSnapshot])
 
 
 
@@ -1059,6 +1075,7 @@ function App() {
   // =========================================
 
   useEffect(() => {
+    if (demoSnapshot !== undefined) return
 
     const analysisRef = ref(
       database,
@@ -1090,7 +1107,7 @@ function App() {
 
     return () => unsubscribe()
 
-  }, [])
+  }, [demoSnapshot])
 
 
 
@@ -1139,6 +1156,7 @@ function App() {
         <section id="status" className="scroll-mt-28 mb-8">
 
           <SystemOverview
+            demoMode={demoSnapshot !== undefined}
             firebaseStatus={firebaseStatus}
             lastUpdate={lastUpdate}
             nodes={nodesWithStatus}

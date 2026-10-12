@@ -124,3 +124,26 @@ Stop with Ctrl+C before resuming the normal website.
 The browser demo is a real Emulator login, but NOT a production release,
 an actual ESP32 measurement, or model scientific validation. Dashboard
 freshness/completeness indicators are engineering checks only.
+
+## Original-dashboard preservation (October 2026)
+
+The earlier Codespaces demo rendered a **separate** dashboard with different
+styling. The corrected demo now shows the **same preexisting** `src/App.jsx`
+and sections: Monitoring, Grafik, Statistik, Spasial, Kinerja IoT, Peta,
+AI, Riwayat. Login is an overlay on top of the original website, not a
+replacement dashboard.
+
+After login, a read-only adapter converts Emulator V2 measurements into
+the existing dashboard's node/history shape. All three Firebase LIVE
+`onValue` effects in App return before subscribing whenever `demoSnapshot`
+is provided, including before sign-in. The production website without that
+prop runs the original simulation subscriptions unchanged.
+
+Emulated latest/history values remain synthetic. Invalid/missing sensors
+stay null, and synthetic model decisions are deliberately *not* presented
+as validated RF/IF analysis. Only a compact "Emulator" banner and an optional
+expandable data-readiness panel are added; all original dashboard components
+and section markup remain in place.
+
+Verification: `node --test tests/test_demo_legacy_adapter.mjs`,
+`npm run build`, and the complete Codespaces demo/CI checks.

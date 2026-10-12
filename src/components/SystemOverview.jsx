@@ -2,7 +2,8 @@ function SystemOverview({
   firebaseStatus,
   lastUpdate,
   nodes,
-  historyCount = 0
+  historyCount = 0,
+  demoMode = false
 }) {
 
   const nodeList =
@@ -74,8 +75,9 @@ function SystemOverview({
 
 
   const current =
-    statusConfig[firebaseStatus]
-    ?? statusConfig.connecting
+    demoMode && firebaseStatus === 'online'
+      ? { ...statusConfig.online, label: 'Firebase Emulator' }
+      : (statusConfig[firebaseStatus] ?? statusConfig.connecting)
 
 
   const formatUpdate = () => {
