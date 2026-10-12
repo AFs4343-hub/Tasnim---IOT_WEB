@@ -34,6 +34,12 @@ function SystemOverview({
 
 
   const statusConfig = {
+    file: {
+      title: 'Pratinjau JSON Lokal',
+      label: 'Bukan Firebase Live',
+      className: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
+      dot: 'bg-amber-400'
+    },
 
     connecting: {
       title: 'Menghubungkan...',

@@ -65,6 +65,26 @@ export function formatFieldLatestNodes(data) {
   return result
 }
 
+// A local Firebase Console export is parsed only in the browser and never
+// uploaded. Keep ONLY the three read-only dashboard paths, so an accidental
+// full database export cannot expose private branches through this UI.
+export function selectFieldHardwareExport(parsed) {
+  const selected = parsed?.hardware_test ?? parsed
+  if (!selected || typeof selected !== 'object' || Array.isArray(selected) ||
+      !selected.nodes || typeof selected.nodes !== 'object' ||
+      !FIELD_NODE_IDS.some(id => selected.nodes?.[id]?.latest)) {
+    throw new Error('JSON harus berisi hardware_test/nodes/N0–N2/latest.')
+  }
+  return {
+    nodes: Object.fromEntries(FIELD_NODE_IDS.map(id => [
+      id, { latest: selected.nodes[id]?.latest ?? null },
+    ])),
+    history: selected.history ?? null,
+    analysis: selected.analysis?.latest
+      ? { latest: selected.analysis.latest } : null,
+  }
+}
+
 // Read actual persisted 5-min Firebase history. Never synthesize missing
 // slots from /latest: those are separate measurements, not stored history.
 export function fieldHistoryRows(rawHistory, limit = 60) {

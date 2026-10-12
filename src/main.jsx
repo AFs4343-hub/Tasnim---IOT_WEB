@@ -26,7 +26,7 @@ function TasnimEntry() {
     </Suspense>
   }
   if (fieldEnabled) {
-    // No live hardware listeners until Firebase Auth confirms a signed-in user.
+    // Direct dashboard in DEV only. Firebase Rules still decide data access.
     return <Suspense fallback={<p className="p-6">Memuat data alat…</p>}>
       <FieldHardwarePreview />
     </Suspense>

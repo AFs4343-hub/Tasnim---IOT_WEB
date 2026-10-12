@@ -1,82 +1,58 @@
-import { useEffect, useState } from 'react'
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { useState } from 'react'
 import App from './App.jsx'
-import { firebaseApp } from './services/firebase.js'
+import { selectFieldHardwareExport } from './services/fieldHardwarePreview.js'
 
-// Development only; the parent entry never mounts this in production.
-const auth = getAuth(firebaseApp)
-
+// Development-only field preview; opening the dashboard does NOT change
+// Firebase Authentication or Database Rules. A local JSON export can be
+// inspected without any account or network write.
 export default function FieldHardwarePreview() {
-  const [user, setUser] = useState(null)
-  const [checking, setChecking] = useState(true)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [localData, setLocalData] = useState(null)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => onAuthStateChanged(auth, current => {
-    setUser(current)
-    setChecking(false)
-    setError('')
-  }, () => {
-    setUser(null)
-    setChecking(false)
-    setError('Firebase Authentication tidak tersedia.')
-  }), [])
-
-  const login = async e => {
-    e.preventDefault()
-    setBusy(true)
+  const readLocalExport = async event => {
+    const file = event.target.files?.[0]
+    if (!file) return
     setError('')
     try {
-      await signInWithEmailAndPassword(auth, email, password)
-      setPassword('')
-    } catch {
-      setError('Login Firebase gagal. Periksa akun dan izin baca hardware_test.')
-    } finally {
-      setBusy(false)
+      if (file.size > 2_000_000 || !file.name.toLowerCase().endsWith('.json')) {
+        throw new Error('Pilih file JSON hardware_test maksimal 2 MB.')
+      }
+      const parsed = JSON.parse(await file.text())
+      setLocalData(selectFieldHardwareExport(parsed))
+    } catch (cause) {
+      setError(cause instanceof SyntaxError
+        ? 'File bukan JSON yang valid.'
+        : cause instanceof Error ? cause.message : 'Gagal membaca file.')
     }
+    event.target.value = ''
   }
 
   return <div className="min-h-screen bg-slate-950 text-white">
-    <div className="border-b border-amber-600/40 bg-slate-900 px-5 py-3">
+    <section className="border-b border-amber-600/40 bg-slate-900 px-5 py-3">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
         <div>
-          <strong className="text-amber-300">PRATINJAU FIREBASE ALAT ASLI — BACA SAJA</strong>
-          <p className="text-xs text-slate-400">
-            Mode pengembangan. Tidak menulis ke Firebase atau mengubah firmware.
+          <strong className="text-amber-300">PRATINJAU DATA ALAT — TANPA LOGIN WEBSITE</strong>
+          <p className="mt-1 max-w-2xl text-xs text-slate-300">
+            {localData
+              ? 'Sedang menampilkan file JSON lokal, bukan data Firebase real-time.'
+              : 'Membaca hardware_test dari Firebase jika Rules mengizinkan. Tidak ada penulisan database.'}
           </p>
         </div>
-        {user && <button type="button" onClick={() => signOut(auth)}
-          className="rounded-lg border border-slate-600 px-4 py-2 text-sm">
-          Keluar
-        </button>}
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className="cursor-pointer rounded-lg border border-slate-600 px-3 py-2 hover:border-cyan-400">
+            Lihat ekspor JSON lokal
+            <input aria-label="Pilih ekspor JSON hardware_test"
+              type="file" accept=".json,application/json"
+              className="sr-only" onChange={readLocalExport}/>
+          </label>
+          {localData && <button type="button"
+            className="rounded-lg border border-slate-600 px-3 py-2"
+            onClick={() => { setLocalData(null); setError('') }}>
+            Kembali ke Firebase langsung
+          </button>}
+        </div>
       </div>
-    </div>
-    {checking && <p role="status" className="mx-auto max-w-lg p-8">Memeriksa login Firebase…</p>}
-    {!checking && !user && <form onSubmit={login}
-      className="mx-auto mt-10 max-w-md space-y-4 rounded-xl border border-slate-700 bg-slate-900 p-6">
-      <h1 className="text-xl font-bold">Masuk untuk melihat data alat</h1>
-      <p className="text-sm text-slate-400">
-        Masuk dengan akun Firebase Authentication yang sudah diizinkan membaca hardware_test.
-        Kata sandi tidak disimpan di repository.
-      </p>
-      <label className="block text-sm">Email
-        <input type="email" required autoComplete="username" value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="mt-1 w-full rounded-md bg-slate-950 p-3"/>
-      </label>
-      <label className="block text-sm">Kata sandi
-        <input type="password" required autoComplete="current-password" value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-md bg-slate-950 p-3"/>
-      </label>
-      {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
-      <button disabled={busy} type="submit"
-        className="rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">
-        {busy ? 'Menghubungkan…' : 'Masuk'}
-      </button>
-    </form>}
-    {!checking && user && <App />}
+      {error && <p role="alert" className="mx-auto mt-2 max-w-7xl text-sm text-rose-300">{error}</p>}
+    </section>
+    <App fieldSnapshot={localData ?? undefined}/>
   </div>
 }

@@ -77,12 +77,18 @@ it must not be pointed at a public Firebase project.
 
 Actual ESP32 N0/N1/N2 values currently exist at
 `hardware_test/nodes/<node>/latest` without canonical V2 metadata.
-A **development-only, authenticated, read-only** mode adapts these values
+A **development-only, read-only** mode adapts these values
 for the existing dashboard. Set `VITE_TASNIM_FIELD_PREVIEW=YES` in a
-local gitignored `.env.local`, then run `npm run dev` and log in
-with an authorized Firebase Auth account. Do **not** commit Firebase
-credentials or change LIVE Rules. The graphs and History table subscribe
-to actual `hardware_test/history` and remain empty until records exist.
+local gitignored `.env.local`, then run `npm run dev`. The
+**dashboard now opens immediately without a website login form**.
+The existing Firebase Rules still require `auth != null` for live
+`hardware_test` reads: without an authorized session, direct
+subscriptions will show a permission notice. Use **Lihat ekspor JSON
+lokal** in the preview to view the exported `hardware_test` JSON
+locally, without uploading data or modifying Firebase. Local-file mode
+is **not realtime**; live graph and History subscriptions update only
+when Firebase permits reads and actual `hardware_test/history` exists.
+Never commit credentials or change LIVE Rules to bypass permissions.
 
 A separate **Emulator-only** history capture prototype demonstrates how
 new observed legacy samples can be archived as immutable 5-minute slots,

@@ -31,7 +31,7 @@ const FIELD_PREVIEW = import.meta.env.DEV &&
   import.meta.env.VITE_TASNIM_FIELD_PREVIEW === 'YES'
 const DATA_ROOT = FIELD_PREVIEW ? 'hardware_test' : tasnimConfig.activeDataRoot
 
-function App({ demoSnapshot } = {}) {
+function App({ demoSnapshot, fieldSnapshot } = {}) {
 
   // =========================================
   // STATE FIREBASE
@@ -63,6 +63,10 @@ function App({ demoSnapshot } = {}) {
   const [firebaseStatus, setFirebaseStatus] =
     useState('connecting')
 
+  // Independent from listener order: a permission denial must never be
+  // masked by a successful callback on a different Firebase path.
+  const [fieldReadError, setFieldReadError] = useState(null)
+
   // Waktu terakhir data terbaru diterima
   const [lastUpdate, setLastUpdate] =
     useState(null)
@@ -86,6 +90,28 @@ function App({ demoSnapshot } = {}) {
     setLastUpdate(demoSnapshot?.demoConnectionState ? null : new Date())
   }, [demoSnapshot, historyLimit])
 
+  // Local JSON export viewer: no Firebase reads, writes or authentication.
+  // This is a STATIC snapshot, never disguised as realtime history.
+  useEffect(() => {
+    if (fieldSnapshot === undefined) {
+      setFieldReadError(null)
+      return
+    }
+    const rawHistory = fieldSnapshot.history ?? null
+    const rows = fieldHistoryRows(rawHistory, historyLimit)
+    setNodes(formatFieldLatestNodes(fieldSnapshot.nodes))
+    setHistory(rows)
+    setHasMoreHistory(
+      rawHistory && typeof rawHistory === 'object'
+        ? Object.keys(rawHistory).length > historyLimit
+        : false
+    )
+    setAnalysis(fieldSnapshot.analysis?.latest ?? null)
+    setFirebaseStatus('file')
+    setLastUpdate(null)
+    setFieldReadError(null)
+  }, [fieldSnapshot, historyLimit])
+
   // =========================================
   // TIMER STATUS NODE
   // =========================================
@@ -107,7 +133,7 @@ function App({ demoSnapshot } = {}) {
   // =========================================
 
   useEffect(() => {
-    if (demoSnapshot !== undefined) return
+    if (demoSnapshot !== undefined || fieldSnapshot !== undefined) return
 
     const nodesRef = ref(database, `${DATA_ROOT}/nodes`)
 
@@ -258,10 +284,7 @@ function App({ demoSnapshot } = {}) {
         setLastUpdate(new Date())
 
 
-        console.log(
-          'DATA FIREBASE:',
-          formattedNodes
-        )
+        // Never print physical measurements in the browser console.
 
       },
 
@@ -274,6 +297,15 @@ function App({ demoSnapshot } = {}) {
         )
 
         setFirebaseStatus('error')
+        if (FIELD_PREVIEW) {
+          setNodes(null)
+          setHistory([])
+          setAnalysis(null)
+          setFieldReadError(error?.code === 'PERMISSION_DENIED' ||
+            error?.code === 'permission_denied'
+            ? 'Firebase menolak akses hardware_test tanpa autentikasi. Dashboard tetap terbuka, tetapi data langsung tidak dapat dibaca. Gunakan ekspor JSON lokal untuk melihat hasil alat sementara; izin Firebase perlu diselesaikan bersama pengelola proyek.'
+            : 'Firebase hardware_test tidak dapat dibaca. Periksa konfigurasi proyek dan koneksi.')
+        }
 
       }
 
@@ -282,7 +314,7 @@ function App({ demoSnapshot } = {}) {
 
     return () => unsubscribe()
 
-  }, [demoSnapshot])
+  }, [demoSnapshot, fieldSnapshot])
 
 
 
@@ -291,7 +323,7 @@ function App({ demoSnapshot } = {}) {
   // =========================================
 
   useEffect(() => {
-    if (demoSnapshot !== undefined) return
+    if (demoSnapshot !== undefined || fieldSnapshot !== undefined) return
 
     // Ambil 60 timestamp terakhir
     const historyRef = query(
@@ -470,20 +502,22 @@ function App({ demoSnapshot } = {}) {
         setHistory(FIELD_PREVIEW ? fieldHistoryRows(data, historyLimit) : formattedHistory)
 
 
-        console.log(
-          'HISTORY FIREBASE:',
-          formattedHistory
-        )
+        // History shown only from records actually stored in Firebase.
 
       },
 
 
       (error) => {
 
-        console.error(
-          'History Firebase Error:',
-          error
-        )
+        console.error('History Firebase listener failed:', error?.code ?? 'unknown')
+        if (FIELD_PREVIEW) {
+          setHistory([])
+          setHasMoreHistory(false)
+          setFieldReadError(error?.code === 'PERMISSION_DENIED' ||
+            error?.code === 'permission_denied'
+            ? 'Firebase menolak pembacaan history. Pembukaan dashboard tanpa login tidak mengubah izin Firebase.'
+            : 'History Firebase tidak dapat dibaca.')
+        }
 
       }
 
@@ -492,7 +526,7 @@ function App({ demoSnapshot } = {}) {
 
     return () => unsubscribe()
 
-  }, [historyLimit, demoSnapshot])
+  }, [historyLimit, demoSnapshot, fieldSnapshot])
 
 
 
@@ -1081,7 +1115,7 @@ function App({ demoSnapshot } = {}) {
   // =========================================
 
   useEffect(() => {
-    if (demoSnapshot !== undefined) return
+    if (demoSnapshot !== undefined || fieldSnapshot !== undefined) return
 
     const analysisRef = ref(
       database,
@@ -1104,16 +1138,20 @@ function App({ demoSnapshot } = {}) {
       },
 
       (error) => {
-        console.error(
-          'AI Firebase Error:',
-          error
-        )
+        console.error('AI Firebase listener failed:', error?.code ?? 'unknown')
+        if (FIELD_PREVIEW) {
+          setAnalysis(null)
+          setFieldReadError(error?.code === 'PERMISSION_DENIED' ||
+            error?.code === 'permission_denied'
+            ? 'Firebase menolak pembacaan hasil AI. Tidak ada hasil AI yang dibuat-buat.'
+            : 'Hasil AI Firebase tidak dapat dibaca.')
+        }
       }
     )
 
     return () => unsubscribe()
 
-  }, [demoSnapshot])
+  }, [demoSnapshot, fieldSnapshot])
 
 
 
@@ -1130,11 +1168,12 @@ function App({ demoSnapshot } = {}) {
 
         {FIELD_PREVIEW && demoSnapshot === undefined && <div role="status"
           className="mb-5 rounded-xl border border-amber-600/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-100">
-          MODE PRATINJAU ALAT ASLI — membaca Firebase <code>hardware_test</code> saja.
-          Data sensor belum tervalidasi ilmiah. Grafik dan History hanya menampilkan
-          rekaman yang benar-benar tersimpan di <code>hardware_test/history</code>.
-          Jika kosong, belum ada histori; pembacaan <code>latest</code> tidak dibuat
-          menjadi histori palsu. Mode ini tidak menulis Firebase.
+          {fieldSnapshot === undefined
+            ? <>PRATINJAU ALAT ASLI — koneksi langsung ke Firebase <code>hardware_test</code>.
+                Jika izin Firebase ditolak, gunakan JSON ekspor lokal.</>
+            : <>PRATINJAU JSON LOKAL — bukan sinkronisasi Firebase real-time.</>}
+          {' '}Grafik dan History hanya berisi data yang benar-benar tersimpan;
+          tidak ada histori atau hasil AI yang dibuat-buat.
         </div>}
 
         <header className="mb-7 sm:mb-10">
@@ -1172,7 +1211,7 @@ function App({ demoSnapshot } = {}) {
 
           <SystemOverview
             demoMode={demoSnapshot !== undefined}
-            firebaseStatus={firebaseStatus}
+            firebaseStatus={fieldReadError ? 'error' : firebaseStatus}
             lastUpdate={lastUpdate}
             nodes={nodesWithStatus}
             historyCount={history.length}
@@ -1185,8 +1224,12 @@ function App({ demoSnapshot } = {}) {
             STATUS KONEKSI / EMPTY STATE
         ================================= */}
 
+        {FIELD_PREVIEW && fieldReadError && <section role="alert"
+          className="mb-6 rounded-xl border border-amber-500/50 bg-amber-950/40 p-4 text-sm text-amber-100">
+          {fieldReadError}
+        </section>}
         <ConnectionStateBanner
-          firebaseStatus={firebaseStatus}
+          firebaseStatus={fieldReadError ? 'error' : firebaseStatus}
           hasNodes={Boolean(nodesWithStatus)}
           historyCount={history.length}
         />

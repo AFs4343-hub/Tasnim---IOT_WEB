@@ -34,20 +34,38 @@ for physical-sensor/clamp checks. No calibration accuracy is inferred.
    VITE_TASNIM_FIELD_PREVIEW=YES
    ```
 
-4. Run `npm run dev`. The **development-only** field screen asks the
-   user to sign in with an authorized Firebase Authentication account.
-   Under the current LIVE `database.rules.json`, `hardware_test` reads
-   require `auth != null`. We DO NOT modify those Rules.
-5. Once authenticated, the *existing TAS[N]IM dashboard* reads
+4. Run `npm run dev`. **The dashboard opens immediately: no email,
+   password, or separate application login page.**
+5. The website subscribes directly (read-only) to
    `/hardware_test/nodes`, `/hardware_test/history`, and
-   `/hardware_test/analysis/latest` using Firebase `onValue` listeners.
-   The Monitoring cards display latest; the graph and History table use
-   only actual Firebase history records and update when they change.
+   `/hardware_test/analysis/latest` with the existing Firebase
+   `onValue` listeners. If the browser already has an authorized Firebase
+   session, the live sensor values can be displayed as Rules allow.
 
-This mode is opt-in, only usable with Vite's development server and
-read-only at the web application level. It does NOT write new history.
-If Authentication or Rules deny access, the web will show a connection
-error instead of falling back to synthetic data.
+**Important permission limitation:** the unchanged LIVE
+`database.rules.json` currently says `hardware_test/.read = auth != null`.
+Removing a website login form does **not** grant an anonymous Firebase
+read. Without an existing permitted Firebase Auth session, Firebase
+correctly denies access; the dashboard stays open and shows a clear
+message instead of switching silently to dummy data.
+
+**No-login visual fallback:** use the **Lihat ekspor JSON lokal** control
+in the development preview. In Firebase Console, export **only the
+`hardware_test` subtree** as JSON (not a full database with credentials).
+Select the JSON file in the website. It is parsed on your own device,
+not uploaded, and used for the existing monitoring cards, history
+graph/table and available AI record. Maximum file size: 2 MB.
+The summary explicitly says **Pratinjau JSON Lokal** and is **NOT**
+a realtime Firebase connection. If history was missing in the export,
+the graph and table correctly remain empty. Choose **Kembali ke Firebase
+langsung** to retry actual live listeners.
+
+This choice gets the research dashboard usable immediately without
+changing Firebase Rules, credentials, device firmware, or production
+mode. For **continuous real-time live data without a manual login**,
+a Firebase-authorized read path must eventually be agreed with the
+project owner. Do not make `hardware_test` public merely to hide the
+permission error.
 
 ## How future history records will be stored
 
