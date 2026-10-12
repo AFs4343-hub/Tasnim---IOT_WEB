@@ -119,8 +119,17 @@ def commit_verified_analysis(db, record):
     """
     if type(record) is not dict:
         raise ValueError("analysis:invalid_record")
-    if record.get("data_source") != "HARDWARE_TEST":
-        raise ValueError("analysis:wrong_source")
+    canonical_preview = {
+        key: value for key, value in record.items()
+        if key not in ("model_version", "inference_timestamp_ms")
+    }
+    canonical = prepare_analysis_record(
+        canonical_preview,
+        model_version=record.get("model_version"),
+        inference_timestamp_ms=record.get("inference_timestamp_ms"),
+    )
+    if canonical != record:
+        raise ValueError("analysis:record_not_canonical")
     slot = record.get("source_timestamp_ms")
     if type(slot) is not int or slot <= 0 or slot % SLOT_MS:
         raise ValueError("analysis:invalid_slot")
