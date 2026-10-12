@@ -36,6 +36,7 @@ for pattern in \
   test_hardware_test_history_v2.py \
   test_hardware_test_preview_v2.py \
   test_hardware_test_worker_v2.py \
+  test_hardware_test_worker_lease_v2.py \
   test_hardware_test_ingestion_core.py \
   test_hardware_test_contract_v2.py \
   test_real_test_bridge_v2.py \
@@ -55,7 +56,7 @@ firebase emulators:exec \
   --only database,auth \
   --project demo-tasnim-security \
   --config firebase.emulator.security.json \
-  "GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_ingestion_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_analysis_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_http_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_emulator.py' -v && node tests/test_security_rules_emulator.mjs && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19004 TASNIM_AUTH_TEST_EMULATOR_ONLY=YES bash scripts/test_hardware_auth_emulator.sh"
+  "GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_ingestion_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_analysis_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_http_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_lease_emulator.py' -v && node tests/test_security_rules_emulator.mjs && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19004 TASNIM_AUTH_TEST_EMULATOR_ONLY=YES bash scripts/test_hardware_auth_emulator.sh"
 
 echo "=== WEBSITE HARDWARE V2 READ-ONLY CONTRACT ==="
 node --test tests/test_hardware_v2_view.mjs tests/test_demo_mode_guards.mjs tests/test_demo_legacy_adapter.mjs

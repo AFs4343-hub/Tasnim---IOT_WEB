@@ -92,3 +92,37 @@ budget. Invalid numeric budgets and dry-run inputs fail closed.
 non-atomic, no leasing or concurrency control, no paginated source cursor,
 no alerting/metrics service, no field-session lifecycle or verified model.
 The worker must not run against Firebase LIVE.
+
+
+## Cooperative single-flight gate for supervised Emulator runs
+
+A new, **opt-in** module
+`ai/hardware_test_worker_lease_v2.py` supplies
+`run_exclusive_emulator_cycle(db, **worker_kwargs)`.
+Callers must satisfy the existing emulator-only worker guard **and** set
+`TASNIM_AI_COORDINATION_EMULATOR_ONLY=YES`; all checks occur before a
+Firebase operation. The adapter must be the demo project on the exact
+localhost RTDB Emulator. Browser RTDB Rules deny the `worker_state` tree;
+the trusted Emulator Admin SDK adapter manages it.
+
+The cooperative lock lives exclusively at
+`/worker_state/ai_v2_exclusive`. A Firebase RTDB transaction claims it
+only when absent, with a random 128-bit owner token. A second cooperating
+worker receives `WorkerLeaseBusy` and **does not infer or commit**.
+After normal completion or a Python exception, a transaction clears the
+lock **only when the original owner matches**. A wrong owner receives
+`WorkerLeaseOwnershipLost`; a stale lock is never expired or stolen.
+A dry run bypasses lock writes and preserves the zero-write guarantee.
+
+**Important limits:** This is *not* a production distributed lease,
+fencing token, or guarantee against manually invoking the underlying
+uncoordinated `run_emulator_cycle`. A hard crash strands a lock, requiring
+explicit human review/reset of **only the demo Emulator**. No unattended
+cron loop, stale-lock auto-takeover, LIVE deployment or worker hosting was
+introduced. The RTDB history read/analysis writes remain non-atomic and
+production scheduling is still prohibited.
+
+CI now exercises the cooperative lock both in offline tests and against
+the real localhost RTDB Emulator. Any continuation toward production needs
+lease fencing, monitored expiration/recovery, source revisions, limited
+database pagination, idempotence across restarts, and signed-off staging.

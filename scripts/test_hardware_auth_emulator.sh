@@ -15,3 +15,4 @@ node --test tests/test_hardware_auth_emulator.mjs
 # Real database-emulator tests for worker retries, bounded dry-run and review gate.
 # Their setUp deletes ONLY the isolated demo hardware_test namespace.
 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_emulator.py' -v
+python3 -m unittest discover -s tests -p 'test_hardware_test_worker_lease_emulator.py' -v
