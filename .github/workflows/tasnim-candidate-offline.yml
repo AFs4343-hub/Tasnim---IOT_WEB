@@ -66,7 +66,11 @@ jobs:
             test_supervisor_demo_cli_guard.py \
             test_hardware_test_ingestion_core.py \
             test_backend_latest_integrity_v1.py \
+            test_gateway_fault_matrix_v1.py \
+            test_candidate_operations_rehearsal.py \
+            test_candidate_release_gate_static.py \
             test_production_baseline_guard.py \
+            test_candidate_release_evidence.py \
             test_hardware_test_contract_v2.py \
             test_hardware_v2_cross_layer_contract.py \
             test_real_test_bridge_v2.py \
@@ -89,6 +93,16 @@ jobs:
           npm ci
           node --test tests/test_hardware_v2_view.mjs tests/test_history_continuity.mjs tests/test_hardware_v2_cross_layer_contract.mjs tests/test_demo_mode_guards.mjs tests/test_demo_legacy_adapter.mjs tests/test_demo_snapshot_polling.mjs tests/test_operational_monitor_demo.mjs
           npm run build
+
+      - name: Write scoped candidate evidence (LIVE still blocked)
+        run: |
+          python scripts/generate_candidate_release_evidence.py --scope offline --output "$RUNNER_TEMP/tasnim_candidate_offline.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasnim-candidate-offline-evidence
+          path: ${{ runner.temp }}/tasnim_candidate_offline.json
+          if-no-files-found: error
 
       - name: Report limitations
         run: |

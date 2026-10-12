@@ -25,3 +25,10 @@ node --test tests/test_demo_supervisor_status_browser.mjs
 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_emulator.py' -v
 python3 -m unittest discover -s tests -p 'test_hardware_test_worker_lease_emulator.py' -v
 python3 -m unittest discover -s tests -p 'test_hardware_test_supervisor_emulator.py' -v
+
+# Recovery and disaster-drill checks use test-owned Emulator namespaces.
+# The full-stack pipeline must run AFTER suites that reset /hardware_test;
+# its final state is then examined via a real authenticated Vite browser.
+python3 -m unittest discover -s tests -p 'test_candidate_backup_restore_emulator.py' -v
+python3 -m unittest discover -s tests -p 'test_full_stack_candidate_emulator.py' -v
+node --test tests/test_full_stack_browser_emulator.mjs

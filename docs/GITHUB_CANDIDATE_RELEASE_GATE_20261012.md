@@ -75,3 +75,38 @@ substitute a production Firebase URL or credentials for missing test tools.
   chain, or privacy boundary needs a human decision; do not overwrite it.
 - **DEPLOYMENT BLOCKED:** production/network/hardware gates above remain
   unmet. A green CI must not be treated as permission to deploy.
+
+
+## Four-track GitHub candidate completion (scope: synthetic/local only)
+
+The four requested GitHub-preparation tracks are now covered by explicit
+tests and documents, **without** changing field/production resources:
+
+| Track | New verification evidence | Operational limits |
+|---|---|---|
+| Full-stack chain | `tests/test_full_stack_candidate_emulator.py` sends signed HTTP packets for N0/N1/N2 to actual localhost RTDB; invokes guarded synthetic Supervisor, checks archived AI/latest/status/audit and source digests. Then `tests/test_full_stack_browser_emulator.mjs` logs into real Auth Emulator and verifies the read-only Vite dashboard, 3 history slots and prototype result. | No physical ESP32, no actual trained-model field evaluation, no HTTPS production |
+| Fault matrix | `tests/test_gateway_fault_matrix_v1.py` injects failures at nonce/history/latest writes, identical replay, conflicting nonce, concurrent collisions and delayed backfill. | Independent transactions can still partially commit; production fencing/concurrency design remains open |
+| Security/operations | `tests/test_candidate_operations_rehearsal.py` inspects nonce-retention diagnostics without cleanup, and validates tamper-evident synthetic backup-copy checks; `tests/test_candidate_backup_restore_emulator.py` tests a restore in isolated localhost Emulator namespace. | No actual nonce GC, public rate limit/TLS, key rotation, real backup or LIVE rollback implemented |
+| GitHub release audit | `tests/test_candidate_release_gate_static.py`, refreshed README, dedicated candidate security runbook, and two GitHub Actions artifact reports generated **only after corresponding checks pass**. | Evidence is per workflow and always explicitly says `LIVE_DEPLOYMENT_BLOCKED` |
+
+The CI artifacts `tasnim-candidate-offline-evidence` and
+`tasnim-candidate-emulator-evidence` contain no credentials or sensor
+readings and identify commit SHA, test scope, baseline guard, remaining
+production blockers and the unintegrated firmware stage. Both workflow
+runs must report **success** before the candidate integration track can
+be called complete. A successful offline job alone does not imply the
+Emulator job passed, and vice versa.
+
+## Operator handoff (GitHub candidate only)
+
+1. Review both CI runs and obtain both scope-specific evidence artifacts.
+2. Run the frozen production baseline guard and targeted offline tests
+   on the local `infra/field-data` branch.
+3. Check `git status -sb`; preserve all collaborator-owned untracked
+   calibration ZIPs and firmware directories. NEVER use broad `git add .`,
+   `git clean`, reset, or deletion.
+4. Keep production changes blocked until the independent infrastructure,
+   field validation, actual backup/rollback and owner-approval gates pass.
+5. **Last software stage:** compare the actual latest collaborator ESP32
+   firmware against the contract and generate a targeted integration plan;
+   do not invent an active firmware version from candidate sources.

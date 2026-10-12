@@ -48,7 +48,11 @@ for pattern in \
   test_supervisor_demo_cli_guard.py \
   test_hardware_test_ingestion_core.py \
   test_backend_latest_integrity_v1.py \
+  test_gateway_fault_matrix_v1.py \
+  test_candidate_operations_rehearsal.py \
+  test_candidate_release_gate_static.py \
   test_production_baseline_guard.py \
+  test_candidate_release_evidence.py \
   test_hardware_test_contract_v2.py \
   test_hardware_v2_cross_layer_contract.py \
   test_real_test_bridge_v2.py \

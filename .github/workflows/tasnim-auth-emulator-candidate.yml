@@ -74,6 +74,16 @@ jobs:
             --config firebase.emulator.security.json \
             'bash scripts/test_hardware_auth_emulator.sh'
 
+      - name: Write scoped candidate evidence (LIVE still blocked)
+        run: |
+          python scripts/generate_candidate_release_evidence.py --scope emulator --output "$RUNNER_TEMP/tasnim_candidate_emulator.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasnim-candidate-emulator-evidence
+          path: ${{ runner.temp }}/tasnim_candidate_emulator.json
+          if-no-files-found: error
+
       - name: Record scope
         run: |
           echo '[PASS] Web SDK Auth + RTDB + AI worker demo integration'
