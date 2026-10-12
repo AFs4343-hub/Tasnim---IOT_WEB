@@ -1,6 +1,7 @@
 // Private Codespaces demo bridge. NEVER instantiated for non-demo builds.
 // Auth/password and RTDB requests go ONLY to two loopback Firebase emulators.
 import { readFileSync } from 'node:fs'
+import { normalizeSupervisorStatus } from '../src/services/operationalMonitorDemo.js'
 
 const project = 'demo-tasnim-security'
 const namespace = project + '-default-rtdb'
@@ -130,7 +131,10 @@ export function createDemoBridgePlugin(env = process.env) {
               // the private worker_state tree or privileged Admin API.
               databaseRead('hardware_test/operations/supervisor/latest', token, limit),
             ])
-            return send(res, 200, { nodes, history, analysis, operational_status })
+            return send(res, 200, {
+              nodes, history, analysis,
+              operational_status: normalizeSupervisorStatus(operational_status),
+            })
           } catch (error) {
             if (error.message === 'DENIED')
               return send(res, 403, { error: 'Akses ditolak oleh Firebase Rules Emulator.' })
