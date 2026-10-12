@@ -129,3 +129,58 @@ CI now exercises the cooperative lock both in offline tests and against
 the real localhost RTDB Emulator. Any continuation toward production needs
 lease fencing, monitored expiration/recovery, source revisions, limited
 database pagination, idempotence across restarts, and signed-off staging.
+
+
+## Supervisor V1 + operational status V1 (demo-only)
+
+Two independently tested modules are available:
+
+- `ai/hardware_test_supervisor_v1.py`: one supervised cycle via
+  `run_supervised_emulator_cycle(...)`, or explicit bounded
+  `run_bounded_demo_schedule(..., cycles=1..3, interval_seconds=1..3600)`.
+  It ALWAYS uses the cooperative single-flight lock (except preview).
+  Retry is only for `ConnectionError`, `TimeoutError`, and changed
+  source snapshots, with `max_attempts=2` by default (hard cap 3).
+  Lock collisions, corrupt checkpoints, and review-required sources are
+  NEVER silently retried or auto-reset. A bounded schedule STOPS on any
+  unsuccessful state. The scheduler is a caller-invoked, synchronous
+  helper, **not** a cron daemon or permanently running process.
+- `ai/hardware_test_supervisor_status_v1.py`: persist exactly one
+  bounded `/worker_state/ai_v2_supervisor/latest` status, guarded by
+  the same localhost-demo authorization. It stores only `state`,
+  `error_code`, timestamp, attempts, and **counts**, with no password,
+  model inference arrays, raw exception, device secrets or sensor data.
+  A database transaction prevents an older timestamp overwriting newer
+  status. A tied timestamp with different content is also preserved,
+  not overwritten by another concurrent status reporter.
+
+Statuses are `PROCESSED`, `IDLE`, `PREVIEW`, `WAITING_LOCK`,
+`REVIEW_REQUIRED`, `RETRY_EXHAUSTED`, and `FAILED`.
+For `dry_run=True`, the supervisor returns `PREVIEW` but creates
+NO lock, telemetry or analysis writes. A failed status-persistence
+transaction is surfaced to the caller instead of being hidden.
+
+**Developer usage** (only from a separately guarded emulator caller
+which injects a local adapter, session, model bundle and predictor):
+
+```python
+from ai.hardware_test_supervisor_v1 import run_supervised_emulator_cycle
+result = run_supervised_emulator_cycle(
+    db=demo_emulator_adapter,
+    session_id="LOCAL_DEMO",
+    model_version="prototype-v1",
+    model_bundle=demo_model,
+    predict_fn=demo_predictor,
+    dry_run=True,
+)
+```
+
+There is **no automatic startup** and **no Firebase LIVE support**.
+Supervisors cannot fix the underlying uncoordinated worker calls, race
+windows between source validation and write, or unsafe automatic takeover
+after a hard crash. Monitoring alerts, a trusted staging model,
+fenced leases, database pagination and deployment approval remain pending.
+
+CI and Codespaces suites now test both modules offline and in the real
+localhost Firebase Emulator. The production website retains `SIMULATION`
+by default and remains unchanged.
