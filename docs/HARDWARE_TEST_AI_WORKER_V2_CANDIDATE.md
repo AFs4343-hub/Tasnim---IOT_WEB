@@ -62,3 +62,31 @@ Do not commit synthetic demonstration values as if they were field data.
   with field ground truth.
 
 Rules LIVE, firmware, website SIMULATION mode, and branch `main` remain untouched.
+
+
+## Bounded candidate worker cycles — October 2026
+
+The worker now executes at most `max_actions_per_cycle=3` action slots per
+invocation by default (configurable 1–50). It validates a *whole* source
+snapshot with at most `max_source_slots=500` slot objects by default
+(configurable 2–5000) and **refuses** oversized snapshots before writing.
+This is a safety ceiling **after the database read**, not production
+pagination or a solution to large-database memory pressure.
+
+Preflight `run_emulator_cycle(..., dry_run=True)` performs the same
+candidate source/digest/checkpoint verification and returns
+`would_process_slots`, `would_recover_slots`, and `deferred_slots`.
+It never calls the AI model or writes to Firebase. Normal mode returns
+`processed_slots`, `recovered_slots`, and `deferred_slots`.
+
+Verified history checkpoints are no longer needlessly replayed on every
+cycle. An absent or behind `analysis/latest` is repaired using only the
+highest verified archived checkpoint; a corrupted or unrecognized latest
+pointer blocks all writes and requires human review. Pending analyses are
+processed oldest-first across successive calls, with a bounded action
+budget. Invalid numeric budgets and dry-run inputs fail closed.
+
+**Still NOT production scheduling**: source snapshots and writes remain
+non-atomic, no leasing or concurrency control, no paginated source cursor,
+no alerting/metrics service, no field-session lifecycle or verified model.
+The worker must not run against Firebase LIVE.

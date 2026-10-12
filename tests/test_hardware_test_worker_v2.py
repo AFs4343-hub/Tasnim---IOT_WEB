@@ -49,10 +49,12 @@ class FakeDB:
 
         class Ref:
             def get(self):
-                if path != "hardware_test/history":
+                if path not in ("hardware_test/history", "hardware_test/analysis/latest"):
                     raise AssertionError("unexpected database read")
                 with parent.lock:
                     parent.reads += 1
+                    if path == "hardware_test/analysis/latest":
+                        return copy.deepcopy(parent.values.get(path))
                     current = copy.deepcopy(parent.history)
                     for key, record in parent.values.items():
                         if key.startswith("hardware_test/history/") and key.endswith("/analysis"):
@@ -116,7 +118,8 @@ class WorkerCandidateTests(unittest.TestCase):
 
         second = self.cycle(forbidden)
         self.assertEqual(second["processed_slots"], [])
-        self.assertEqual(second["recovered_slots"], [SLOT0+INTERVAL, SLOT0+2*INTERVAL])
+        self.assertEqual(second["recovered_slots"], [])
+        self.assertEqual(second["deferred_slots"], [])
         self.assertEqual(len(self.db.values), 3)
 
     def test_partial_latest_failure_retry_does_not_repredict_old_slot(self):
@@ -177,6 +180,99 @@ class WorkerCandidateTests(unittest.TestCase):
         left = context_digests(a, prepare_backlog(a, session_id="OFFLINE_SESSION"))
         right = context_digests(b, prepare_backlog(b, session_id="OFFLINE_SESSION"))
         self.assertEqual(left, right)
+
+    def test_three_action_budget_progresses_without_replaying_old_checkpoints(self):
+        self.db.history = {
+            str(SLOT0+i*INTERVAL): slot(SLOT0+i*INTERVAL)
+            for i in range(7)
+        }
+        first = self.cycle()
+        self.assertEqual(first["processed_slots"], [
+            SLOT0+INTERVAL, SLOT0+2*INTERVAL, SLOT0+3*INTERVAL,
+        ])
+        self.assertEqual(first["deferred_slots"], [
+            SLOT0+4*INTERVAL, SLOT0+5*INTERVAL, SLOT0+6*INTERVAL,
+        ])
+        second = self.cycle()
+        self.assertEqual(second["processed_slots"], [
+            SLOT0+4*INTERVAL, SLOT0+5*INTERVAL, SLOT0+6*INTERVAL,
+        ])
+        self.assertEqual(second["deferred_slots"], [])
+        self.assertEqual(second["recovered_slots"], [])
+        before = copy.deepcopy(self.db.values)
+        third = self.cycle(lambda frame, bundle: self.fail("duplicate model call"))
+        self.assertEqual(third["processed_slots"], [])
+        self.assertEqual(third["recovered_slots"], [])
+        self.assertEqual(self.db.values, before)
+
+    def test_dry_run_is_read_only_and_does_not_predict(self):
+        def forbidden(frame, bundle):
+            raise AssertionError("model must not run during dry run")
+        preview = run_emulator_cycle(
+            self.db, session_id="OFFLINE_SESSION", model_version=MODEL,
+            model_bundle=None, predict_fn=forbidden,
+            now_ms=SLOT0+10*INTERVAL, dry_run=True,
+            max_actions_per_cycle=1,
+        )
+        self.assertEqual(preview["would_process_slots"], [SLOT0+INTERVAL])
+        self.assertEqual(preview["deferred_slots"], [SLOT0+2*INTERVAL])
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(self.db.values, {})
+
+    def test_latest_missing_repairs_only_highest_verified_checkpoint(self):
+        self.cycle()
+        self.db.values.pop("hardware_test/analysis/latest")
+        original = copy.deepcopy(self.db.values)
+        repair = self.cycle(lambda frame, bundle: self.fail("checkpoint re-predicted"))
+        self.assertEqual(repair["recovered_slots"], [SLOT0+2*INTERVAL])
+        self.assertEqual(repair["processed_slots"], [])
+        for path, value in original.items():
+            self.assertEqual(self.db.values[path], value)
+        self.assertEqual(
+            self.db.values["hardware_test/analysis/latest"]["source_timestamp_ms"],
+            SLOT0+2*INTERVAL,
+        )
+
+    def test_bad_latest_pointer_requires_review_before_any_writes(self):
+        self.cycle()
+        self.db.values["hardware_test/analysis/latest"] = {
+            "source_timestamp_ms": SLOT0+2*INTERVAL, "status": "ANOMALI"
+        }
+        before = copy.deepcopy(self.db.values)
+        with self.assertRaisesRegex(WorkerReviewRequired, "latest_checkpoint_review_required"):
+            self.cycle()
+        self.assertEqual(self.db.values, before)
+
+    def test_source_limit_requires_review_before_any_write(self):
+        self.db.history = {
+            str(SLOT0+i*INTERVAL): slot(SLOT0+i*INTERVAL)
+            for i in range(6)
+        }
+        with self.assertRaisesRegex(WorkerReviewRequired, "source_history_limit_exceeded"):
+            run_emulator_cycle(
+                self.db, session_id="OFFLINE_SESSION", model_version=MODEL,
+                model_bundle=None, predict_fn=prediction,
+                max_source_slots=5, now_ms=SLOT0+10*INTERVAL,
+            )
+        self.assertEqual(self.db.values, {})
+
+    def test_invalid_budgets_rejected_without_database_reads(self):
+        for settings in (
+            {"max_actions_per_cycle": 0},
+            {"max_actions_per_cycle": True},
+            {"max_actions_per_cycle": 51},
+            {"max_source_slots": 1},
+            {"max_source_slots": 5001},
+            {"dry_run": "YES"},
+        ):
+            with self.subTest(settings=settings):
+                with self.assertRaises(ValueError):
+                    run_emulator_cycle(
+                        self.db, session_id="OFFLINE_SESSION", model_version=MODEL,
+                        model_bundle=None, predict_fn=prediction,
+                        now_ms=SLOT0+10*INTERVAL, **settings,
+                    )
+        self.assertEqual(self.db.reads, 0)
 
     def test_empty_history_and_one_warmup_slot_no_writes(self):
         self.db.history = {}

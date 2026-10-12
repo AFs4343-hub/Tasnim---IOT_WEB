@@ -113,6 +113,20 @@ class RealWorkerEmulatorTests(unittest.TestCase):
         self.assertEqual(second["processed_slots"], [SLOT0+2*INTERVAL])
         self.assertEqual(self.read(key), stored)
 
+    def test_04_preview_dry_run_has_no_emulator_writes(self):
+        with patch.dict(os.environ, {"TASNIM_AI_WORKER_EMULATOR_ONLY": "YES"}):
+            report = run_emulator_cycle(
+                self.adapter, session_id="DEMO_WORKER_SESSION",
+                model_version="prototype-v1", model_bundle=None,
+                predict_fn=lambda frame, bundle: self.fail("dry run predicted"),
+                now_ms=SLOT0+10*INTERVAL, dry_run=True,
+                max_actions_per_cycle=1,
+            )
+        self.assertEqual(report["would_process_slots"], [SLOT0+INTERVAL])
+        self.assertEqual(report["deferred_slots"], [SLOT0+2*INTERVAL])
+        self.assertIsNone(self.read("hardware_test/analysis/latest"))
+        self.assertIsNone(self.read(f"hardware_test/history/{SLOT0+INTERVAL}/analysis"))
+
     def test_03_late_backfill_stops_stale_checkpoints(self):
         db.reference(f"hardware_test/history/{SLOT0+INTERVAL}", app=self.app).delete()
         db.reference(f"hardware_test/history/{SLOT0+3*INTERVAL}", app=self.app).set(

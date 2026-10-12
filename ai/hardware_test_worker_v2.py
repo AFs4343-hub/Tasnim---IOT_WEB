@@ -104,17 +104,26 @@ def _check_markers(history, plan, digests):
 
 def run_emulator_cycle(
     db, *, session_id, model_version, model_bundle, predict_fn, now_ms=None,
+    max_actions_per_cycle=3, max_source_slots=500, dry_run=False,
 ):
     """Process all eligible slots once; persist checkpoints in demo RTDB.
 
-    On restart, identical archived analysis is replayed to repair a partial
-    history/latest write. New inference is never run for an archived slot.
-    Re-read source immediately before committing, but this is not an atomic
-    snapshot/write lock: LIVE usage is explicitly prohibited.
+    On restart, only a missing/behind latest pointer is repaired using the
+    highest verified archived checkpoint, never re-predicting an analyzed
+    slot. Up to three writes/predictions occur per cycle by default. A dry
+    run inspects all source markers but runs neither model nor transactions.
+    Re-read source before commits; this is NOT an atomic snapshot/write lock
+    and LIVE usage is expressly prohibited.
     """
     require_worker_emulator(db)
     if not callable(predict_fn):
         raise ValueError("predict_fn:required")
+    if type(max_actions_per_cycle) is not int or not 1 <= max_actions_per_cycle <= 50:
+        raise ValueError("max_actions_per_cycle:range_1_to_50")
+    if type(max_source_slots) is not int or not 2 <= max_source_slots <= 5000:
+        raise ValueError("max_source_slots:range_2_to_5000")
+    if type(dry_run) is not bool:
+        raise ValueError("dry_run:boolean_required")
     if not isinstance(model_version, str) or not model_version.strip() or len(model_version) > 80:
         raise ValueError("model_version:invalid")
     timestamp = int(time.time() * 1000) if now_ms is None else now_ms
@@ -122,21 +131,61 @@ def run_emulator_cycle(
         raise ValueError("now_ms:invalid")
 
     initial = _snapshot(db)
+    if len(initial) > max_source_slots:
+        raise WorkerReviewRequired(
+            f"source_history_limit_exceeded:{len(initial)}>{max_source_slots}"
+        )
     plan = prepare_backlog(
         initial, session_id=session_id, expected_model_version=model_version,
     )
     fingerprints = context_digests(initial, plan)
     _check_markers(initial, plan, fingerprints)
 
-    processed, recovered = [], []
-    for row in plan["rows"]:
-        slot = row["source_timestamp_ms"]
-        if slot in plan["warmup_slots"]:
-            continue
-        marker = initial[str(slot)].get("analysis")
-        if marker is None and slot not in plan["pending_timestamps"]:
-            continue
+    # Verify a latest pointer against the canonical archived record.
+    # Old, healthy checkpoints require no transaction on every cycle.
+    archived = [
+        (row["source_timestamp_ms"], initial[str(row["source_timestamp_ms"])]["analysis"])
+        for row in plan["rows"]
+        if isinstance(initial[str(row["source_timestamp_ms"])].get("analysis"), dict)
+    ]
+    latest = db.reference("hardware_test/analysis/latest").get()
+    if latest is not None:
+        if type(latest) is not dict or not any(
+            marker == latest for _, marker in archived
+        ):
+            raise WorkerReviewRequired("latest_checkpoint_review_required")
 
+    highest = max(archived, default=None, key=lambda item: item[0])
+    repair = []
+    if highest is not None and (latest is None
+                                or latest["source_timestamp_ms"] < highest[0]):
+        repair.append(highest)
+
+    # Process pending new sources in ascending slot order. Only one verified
+    # checkpoint repair is needed to restore the highest archived latest.
+    # A repair runs first to preserve partial-write crash recovery.
+    pending = [(slot, None) for slot in plan["pending_timestamps"]]
+    actions = repair + pending
+    selected = actions[:max_actions_per_cycle]
+    deferred = [slot for slot, _ in actions[max_actions_per_cycle:]]
+
+    report = {
+        "processed_slots": [],
+        "recovered_slots": [],
+        "would_process_slots": [slot for slot, marker in selected if marker is None],
+        "would_recover_slots": [slot for slot, marker in selected if marker is not None],
+        "deferred_slots": deferred,
+        "warmup_slots": plan["warmup_slots"],
+        "skipped": plan["skipped"],
+        "source_root": "hardware_test",
+        "model_stage": "PROTOTYPE_SIMULATION",
+        "dry_run": dry_run,
+    }
+    if dry_run:
+        return report
+
+    processed, recovered = [], []
+    for slot, marker in selected:
         if marker is None:
             frame = model_frame_for_slot(plan, slot)
             prediction = annotate_preview(
@@ -152,6 +201,10 @@ def run_emulator_cycle(
             candidate = marker
 
         current = _snapshot(db)
+        if len(current) > max_source_slots:
+            raise WorkerSourceChanged(
+                f"source_history_limit_changed:{len(current)}>{max_source_slots}"
+            )
         current_plan = prepare_backlog(
             current, session_id=session_id,
             expected_model_version=model_version,
@@ -166,11 +219,10 @@ def run_emulator_cycle(
         commit_verified_analysis(db, candidate)
         (processed if marker is None else recovered).append(slot)
 
-    return {
+    report.update({
         "processed_slots": processed,
         "recovered_slots": recovered,
-        "warmup_slots": plan["warmup_slots"],
-        "skipped": plan["skipped"],
-        "source_root": "hardware_test",
-        "model_stage": "PROTOTYPE_SIMULATION",
-    }
+        "would_process_slots": [],
+        "would_recover_slots": [],
+    })
+    return report
