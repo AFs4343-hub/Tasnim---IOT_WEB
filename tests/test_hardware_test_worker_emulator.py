@@ -43,6 +43,11 @@ class FailLatestOnce:
             parent = self
 
             class BrokenTransaction:
+                def get(self):
+                    # Worker V2 first reads latest to check its checkpoint.
+                    # Only the subsequent transaction is fault-injected.
+                    return parent.adapter.reference(path).get()
+
                 def transaction(self, update):
                     parent.failed = True
                     raise ConnectionError("injected failure after history commit")
