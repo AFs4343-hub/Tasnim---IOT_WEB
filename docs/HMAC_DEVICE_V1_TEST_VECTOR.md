@@ -18,14 +18,24 @@ Exact UTF-8 request body **on one line, without a terminating LF**:
 
 Compute HMAC over:
 
+## Python check
+
 ```python
-message = (
-    b"TASNIM-DEVICE-V1\\nN0\\n1791724501000\\ntestnonce000000001\\n"
-    .replace(b"\\\\n", b"\\n")
-    + body
+import hashlib
+import hmac
+
+body = (
+    b'{"node_id":"N0","ph":7.2,"quality_flags":[],"rssi":-49,'
+    b'"sample_id":"N0_1791724501000_3","schema_version":2,'
+    b'"sequence":3,"tds":240.0,"timestamp":1791724501000,'
+    b'"turbidity":16.0}'
 )
-expected = hmac.new(bytes.fromhex("11" * 32), message, hashlib.sha256).hexdigest()
+message = b"TASNIM-DEVICE-V1\nN0\n1791724501000\ntestnonce000000001\n" + body
+actual = hmac.new(bytes.fromhex("11" * 32), message, hashlib.sha256).hexdigest()
+assert actual == "e1fa88237d22368249922eea3858c8108dd25c8f4d36d93af561cec8e526f90a"
+
 ```
+
 
 Cross-language contract: ESP32 Arduino and Python must compute the exact
 same hex digest. Differences in floating-point formatting, field order or
