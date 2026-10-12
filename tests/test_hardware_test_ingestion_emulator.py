@@ -29,6 +29,14 @@ NOW_MS = TS + 40 * DAY_MS
 SLOT = str((TS // 300_000) * 300_000)
 
 
+def expected_in_rtdb(packet):
+    """RTDB does not preserve an empty array-valued property."""
+    result = dict(packet)
+    if result.get("quality_flags") == []:
+        result.pop("quality_flags")
+    return result
+
+
 def sample(node="N0", ts=TS, seq=3, **overrides):
     result = {
         "schema_version": 2,
@@ -112,15 +120,15 @@ class IngestionOnRealEmulatorTests(unittest.TestCase):
         result = self.ingest(packet)
         self.assertEqual(result["history"], "CONFIRMED")
         self.assertEqual(result["latest"], "LATEST_CONFIRMED")
-        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), packet)
-        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), packet)
+        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), expected_in_rtdb(packet))
+        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), expected_in_rtdb(packet))
 
     def test_02_identical_retry_is_idempotent(self):
         packet = sample()
         self.ingest(packet)
         self.ingest(dict(packet))
-        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), packet)
-        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), packet)
+        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), expected_in_rtdb(packet))
+        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), expected_in_rtdb(packet))
 
     def test_03_old_replay_preserves_newer_latest(self):
         newer = sample(ts=TS + 300_000, seq=5)
@@ -128,8 +136,8 @@ class IngestionOnRealEmulatorTests(unittest.TestCase):
         self.ingest(newer)
         result = self.ingest(older)
         self.assertEqual(result["latest"], "OLDER_REPLAY_PRESERVED")
-        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), older)
-        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), newer)
+        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), expected_in_rtdb(older))
+        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), expected_in_rtdb(newer))
 
     def test_04_conflict_same_slot_does_not_overwrite(self):
         first = sample()
@@ -137,25 +145,25 @@ class IngestionOnRealEmulatorTests(unittest.TestCase):
         self.ingest(first)
         with self.assertRaises(HistoryConflict):
             self.ingest(competing)
-        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), first)
-        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), first)
+        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), expected_in_rtdb(first))
+        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), expected_in_rtdb(first))
 
     def test_05_conflict_same_timestamp_different_value(self):
         first = sample()
         self.ingest(first)
         with self.assertRaises(HistoryConflict):
             self.ingest(sample(ph=8.8))
-        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), first)
+        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), expected_in_rtdb(first))
 
     def test_06_partial_failure_recovers_on_retry(self):
         packet = sample()
         faulty = FailLatestOnce(_AppDatabase(self.app))
         with self.assertRaises(ConnectionError):
             self.ingest(packet, adapter=faulty)
-        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), packet)
+        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), expected_in_rtdb(packet))
         self.assertIsNone(self.read("hardware_test/nodes/N0/latest"))
         self.ingest(packet)
-        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), packet)
+        self.assertEqual(self.read("hardware_test/nodes/N0/latest"), expected_in_rtdb(packet))
 
     def test_07_concurrent_collision_has_single_winner(self):
         first = sample()
@@ -172,7 +180,7 @@ class IngestionOnRealEmulatorTests(unittest.TestCase):
             results = list(pool.map(write, (first, competing)))
         self.assertCountEqual(results, ["SAVED", "CONFLICT"])
         stored = self.read(f"hardware_test/history/{SLOT}/N0")
-        self.assertIn(stored, (first, competing))
+        self.assertIn(stored, (expected_in_rtdb(first), expected_in_rtdb(competing)))
         self.assertEqual(self.read("hardware_test/nodes/N0/latest"), stored)
 
     def test_08_three_nodes_same_slot(self):
@@ -210,7 +218,7 @@ class IngestionOnRealEmulatorTests(unittest.TestCase):
         packet = sample()
         result = self.ingest(packet)
         self.assertEqual(result["history"], "CONFIRMED")
-        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), packet)
+        self.assertEqual(self.read(f"hardware_test/history/{SLOT}/N0"), expected_in_rtdb(packet))
 
 
 class _AppDatabase:
