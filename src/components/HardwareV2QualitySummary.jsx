@@ -41,9 +41,19 @@ export default function HardwareV2QualitySummary({ nodes, rows = [] }) {
       <p className="mt-4 text-sm text-slate-300">
         Slot lengkap: <strong>{report.completeSlots}</strong> dari {report.totalSlots} ditampilkan.
         {report.incompleteSlots > 0 && <span className="ml-2 text-amber-300">
-          {report.incompleteSlots} slot tidak lengkap/perlu review.
+          {report.incompleteSlots} slot tercatat tetapi tidak lengkap/perlu review.
         </span>}
       </p>
+      {report.interiorGapSlots > 0 && <p className="mt-2 text-sm text-amber-300">
+        {report.interiorGapSlots} slot 5 menit belum terlihat di antara
+        {report.observedSlots} slot yang tercatat ({report.gapSegments} rentang).
+        Ini indikasi celah pada jendela histori, bukan bukti sensor gagal,
+        data hilang permanen, atau penilaian kualitas air.
+        Data terlambat dapat mengisi celah ini.
+      </p>}
+      {report.observedSlots < 2 && <p className="mt-2 text-xs text-slate-400">
+        Belum cukup dua slot teramati untuk memeriksa celah di dalam jendela histori.
+      </p>}
     </section>
   )
 }

@@ -1,6 +1,6 @@
 // Presenter for the ORIGINAL TASNIM dashboard from emulator-only V2 records.
 // No Firebase imports or writes; missing/invalid values stay null (never 0).
-import { historyRows, latestNodes, NODE_IDS } from './hardwareV2View.js'
+import { historyRows, latestNodes, NODE_IDS, validEpoch, SLOT_MS } from './hardwareV2View.js'
 
 const locations = {
   N0: 'Hulu / Baseline',
@@ -29,7 +29,7 @@ export function adaptEmulatorForLegacyDashboard(snapshot, limit = 60) {
 
   const allValidKeys = Object.keys(snapshot?.history ?? {}).filter(key =>
     /^\d+$/.test(key) && Number.isSafeInteger(Number(key))
-    && Number(key) > 0 && Number(key) % 300000 === 0
+    && validEpoch(Number(key)) && Number(key) % SLOT_MS === 0
   )
   const orderedRows = historyRows(snapshot?.history, limit)
   const history = orderedRows.map(row => {

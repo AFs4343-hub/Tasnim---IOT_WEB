@@ -91,7 +91,7 @@ export function historyRows(raw, limit = 60) {
   const rows = []
   for (const [slotKey, entry] of Object.entries(raw)) {
     const slot = Number(slotKey)
-    if (!Number.isSafeInteger(slot) || slot <= 0 || slot % SLOT_MS !== 0
+    if (!validEpoch(slot) || slot % SLOT_MS !== 0
         || String(slot) !== slotKey || !entry || typeof entry !== 'object'
       || Array.isArray(entry)) continue
     const nodes = {}
@@ -108,6 +108,39 @@ export function historyRows(raw, limit = 60) {
   }
   rows.sort((a, b) => a.slot - b.slot)
   return rows.slice(-Math.max(1, Math.min(limit, 240)))
+}
+
+/**
+ * Coverage of canonical slots strictly BETWEEN observed history endpoints.
+ * Never extrapolate before the first/after the last visible record: the
+ * observation session and bounded RTDB query may be incomplete/unknown.
+ * Missing keys are not synthesized as measurements, and are not proof of
+ * packet loss. Recomputing after backfill removes a previously visible gap.
+ */
+export function historyContinuity(rows) {
+  const slots = [...new Set((Array.isArray(rows) ? rows : [])
+    .map(row => row?.slot)
+    .filter(slot => validEpoch(slot) && slot % SLOT_MS === 0))]
+    .sort((a, b) => a - b)
+  let interiorGapSlots = 0
+  let gapSegments = 0
+  for (let i = 1; i < slots.length; i++) {
+    const missing = (slots[i] - slots[i - 1]) / SLOT_MS - 1
+    if (missing > 0) {
+      interiorGapSlots += missing
+      gapSegments++
+    }
+  }
+  return {
+    observedSlots: slots.length,
+    interiorGapSlots,
+    gapSegments,
+    // This is the range bounded by two observed endpoints, not a claimed
+    // complete measurement session or an acquisition-success percentage.
+    spanSlots: slots.length > 1
+      ? (slots[slots.length - 1] - slots[0]) / SLOT_MS + 1
+      : slots.length,
+  }
 }
 
 export function analysisStatus(analysis, rows) {
@@ -168,5 +201,6 @@ export function hardwareReadiness(nodes, rows, nowMs = Date.now()) {
     totalSlots: rows.length,
     completeSlots,
     incompleteSlots: rows.length - completeSlots,
+    ...historyContinuity(rows),
   }
 }

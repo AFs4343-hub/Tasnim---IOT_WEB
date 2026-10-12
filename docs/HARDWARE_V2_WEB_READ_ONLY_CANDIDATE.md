@@ -256,3 +256,28 @@ previous-session responses. The existing legacy-adapter tests also verify
 the connecting/error/online presentation. The full Auth/RTDB Emulator
 acceptance remains separate, and physical device and scientific validity
 are not claimed by these tests.
+
+
+## Read-only internal-history continuity and delayed backfill (October 2026)
+
+The dashboard's `historyRows` now refuses noncanonical and pre-2024
+5-minute slot keys, consistent with the V2 acquisition-time minimum. The
+legacy adapter uses the same minimum when counting whether earlier history
+exists. This affects **only** read-only Emulator presentation and does not
+delete or migrate any stored history.
+
+`historyContinuity(rows)` computes the number of canonical five-minute
+slots **between the first and last visible keys** that are not currently
+present in the received, bounded history window. It does not manufacture
+measurements in those slots, extrapolate before/after the window, infer an
+observation-session start, or declare packet loss. The quality panel reports
+interior gaps separately from present-but-incomplete slots with an explicit
+engineering-only caveat. No automated alert is generated from gaps alone.
+
+If a delayed measurement restores a previously absent slot key, the next
+read-only snapshot automatically recomputes the smaller gap count; if the
+backfilled slot lacks N0/N1/N2, it remains explicitly incomplete. The
+pure tests in `tests/test_history_continuity.mjs` cover unordered records,
+incremental late-node backfill, wrong-slot timestamps, missing data,
+out-of-range keys, query paging and nonmutation. No Firebase LIVE/firmware
+behavior or scientific sensor accuracy is implied.
