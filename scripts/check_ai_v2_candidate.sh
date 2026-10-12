@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "=== TASNIM AI V2 + SIGNED GATEWAY CANDIDATE CHECK ==="
+echo "=== TASNIM AI V2 + SIGNED HTTP GATEWAY CANDIDATE CHECK ==="
 if [ "$(git branch --show-current)" != "infra/field-data" ]; then
   echo "[STOP] Must run on infra/field-data"; exit 1
 fi
@@ -41,7 +41,9 @@ for pattern in \
   test_real_test_regression.py \
   test_hardware_test_analysis_writer_v2.py \
   test_hardware_test_preview_real_model.py \
-  test_hardware_test_gateway_auth_v1.py
+  test_hardware_test_gateway_auth_v1.py \
+  test_hardware_test_gateway_http_v1.py \
+  test_hmac_interop_v1.py
 do
   python3 -m unittest discover -s tests -p "$pattern" -v
 done
@@ -51,12 +53,12 @@ firebase emulators:exec \
   --only database \
   --project demo-tasnim-security \
   --config firebase.emulator.security.json \
-  "GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_ingestion_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_analysis_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_emulator.py' -v && node tests/test_security_rules_emulator.mjs"
+  "GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_ingestion_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_analysis_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_emulator.py' -v && GCLOUD_PROJECT=demo-tasnim-security FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:19003 python3 -m unittest discover -s tests -p 'test_hardware_test_gateway_http_emulator.py' -v && node tests/test_security_rules_emulator.mjs"
 
 echo "=== WEBSITE BUILD ==="
 npm run build
 git diff --check
 echo "=== GIT STATUS ==="
 git status -sb
-echo "[PASS] AI V2 + SIGNED GATEWAY CANDIDATE TEST PACK COMPLETE"
+echo "[PASS] AI V2 + SIGNED HTTP GATEWAY CANDIDATE TEST PACK COMPLETE"
 echo "[SAFE] No Firebase LIVE deploy, no hardware firmware modification"
