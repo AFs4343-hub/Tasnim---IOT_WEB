@@ -8,6 +8,7 @@ import {
 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { parseNodeCoords, resolveNodeCoords } from '../services/nodeCoordinates.js'
 
 
 // ======================================================
@@ -120,6 +121,11 @@ function FitMapToNodes({ validLocations }) {
 }
 
 
+const CONFIGURED_COORDS = parseNodeCoords(
+  import.meta.env.VITE_TASNIM_NODE_COORDS
+)
+
+
 function NodeMap({ nodes }) {
 
   const mappedNodes =
@@ -129,6 +135,8 @@ function NodeMap({ nodes }) {
         nodeId,
 
         ...location,
+
+        ...resolveNodeCoords(nodeId, nodes?.[nodeId], CONFIGURED_COORDS),
 
         status:
           nodes?.[nodeId]?.status
@@ -409,8 +417,8 @@ function NodeMap({ nodes }) {
                         : (
 
                           <p className="mt-4 text-xs leading-5 text-slate-500">
-                            Masukkan latitude dan longitude
-                            setelah posisi final node ditentukan.
+                            Isi VITE_TASNIM_NODE_COORDS di .env
+                            (mis. N0:0.55,123.06) atau kirim latitude/longitude dari GPS alat.
                           </p>
 
                         )

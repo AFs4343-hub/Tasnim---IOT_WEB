@@ -1,0 +1,121 @@
+name: TASNIM candidate offline checks
+
+on:
+  push:
+    branches:
+      - infra/field-data
+    paths-ignore:
+      - 'data/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tasnim-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-and-build:
+    name: Synthetic unit tests and website build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ai/requirements.txt
+
+      - name: Install non-production Python test dependencies
+        run: |
+          python -m pip install -r ai/requirements.txt
+
+      - name: Assert production configuration unchanged
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("tasnim.config.json").read_text())
+          assert cfg == {"activeDataRoot":"simulation","mode":"SIMULATION"}
+          prod = json.loads(Path("firebase.json").read_text())
+          assert prod["database"]["rules"] == "database.rules.json"
+          emu = json.loads(Path("firebase.emulator.security.json").read_text())
+          assert emu["emulators"]["database"] == {"host":"127.0.0.1","port":19003}
+          assert emu["emulators"]["auth"] == {"host":"127.0.0.1","port":19004}
+          print("[PASS] SIMULATION, production Rules mapping, localhost demo target")
+          PY
+
+      - name: Verify frozen production file baseline
+        run: python scripts/check_production_baseline_guard.py
+
+      - name: Run model-independent offline tests
+        run: |
+          set -euo pipefail
+          for pattern in \
+            test_hardware_test_history_v2.py \
+            test_hardware_test_preview_v2.py \
+            test_hardware_test_worker_v2.py \
+            test_hardware_test_checkpoint_integrity_v1.py \
+            test_hardware_test_worker_lease_v2.py \
+            test_hardware_test_supervisor_v1.py \
+            test_hardware_test_supervisor_recovery_v1.py \
+            test_hardware_test_supervisor_audit_v1.py \
+            test_real_model_contract_cli.py \
+            test_supervisor_demo_cli_guard.py \
+            test_hardware_test_ingestion_core.py \
+            test_backend_latest_integrity_v1.py \
+            test_gateway_fault_matrix_v1.py \
+            test_candidate_operations_rehearsal.py \
+            test_candidate_release_gate_static.py \
+            test_production_baseline_guard.py \
+            test_candidate_release_evidence.py \
+            test_hardware_test_contract_v2.py \
+            test_hardware_v2_cross_layer_contract.py \
+            test_real_test_bridge_v2.py \
+            test_security_rules_candidate_static.py \
+            test_hardware_test_analysis_writer_v2.py \
+            test_hardware_test_gateway_auth_v1.py \
+            test_hardware_test_gateway_http_v1.py \
+            test_gateway_demo_rate_limit_v1.py \
+            test_field_legacy_history_capture_v1.py \
+            test_hardware_test_history_recorder.py \
+            test_hardware_test_csv_import.py \
+            test_realtime_inference_hardware_root.py \
+            test_web_anonymous_rules_candidate.py \
+            test_firebase_project_setup.py \
+            test_hmac_interop_v1.py
+          do
+            python -m unittest discover -s tests -p "$pattern" -v
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install web dependencies and build
+        run: |
+          npm ci
+          node --test tests/test_hardware_v2_view.mjs tests/test_history_continuity.mjs tests/test_hardware_v2_cross_layer_contract.mjs tests/test_demo_mode_guards.mjs tests/test_demo_legacy_adapter.mjs tests/test_demo_snapshot_polling.mjs tests/test_operational_monitor_demo.mjs tests/test_field_hardware_preview.mjs tests/test_web_data_pipeline.mjs
+          npm run build
+
+      - name: Write scoped candidate evidence (LIVE still blocked)
+        run: |
+          python scripts/generate_candidate_release_evidence.py --scope offline --output "$RUNNER_TEMP/tasnim_candidate_offline.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasnim-candidate-offline-evidence
+          path: ${{ runner.temp }}/tasnim_candidate_offline.json
+          if-no-files-found: error
+
+      - name: Report limitations
+        run: |
+          echo "[PASS] Model-independent offline checks and website build"
+          echo "[INFO] No Firebase Emulator was used in this workflow"
+          echo "[INFO] Real model .joblib is gitignored; Codespaces still validates it"
+          echo "[SAFE] No Firebase LIVE deploy, service accounts, or firmware flashing"

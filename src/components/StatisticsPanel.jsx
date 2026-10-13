@@ -271,7 +271,7 @@ function StatisticsPanel({
           </h2>
 
           <p className="mt-1 text-sm text-slate-400">
-            Ringkasan data historis {current.label}
+            Ringkasan data historis {current.label}{' '}
             pada N0, N1, dan N2.
           </p>
 

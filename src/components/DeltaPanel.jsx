@@ -1,6 +1,18 @@
-function DeltaValue({ label, value, unit = '' }) {
+function DeltaValue({
+  label,
+  value,
+  unit = ''
+}) {
+  const hasValue =
+    value !== null
+    && value !== undefined
+
   const formattedValue =
-    value > 0 ? `+${value}` : `${value}`
+    !hasValue
+      ? '—'
+      : Number(value) > 0
+        ? `+${value}`
+        : `${value}`
 
   return (
     <div className="rounded-xl bg-slate-950 p-4">
@@ -12,14 +24,39 @@ function DeltaValue({ label, value, unit = '' }) {
         {formattedValue}
       </p>
 
-      {unit && (
+      {hasValue && unit && (
         <p className="text-xs text-slate-500">
           {unit}
+        </p>
+      )}
+
+      {!hasValue && (
+        <p className="mt-1 text-xs text-slate-600">
+          Data tidak tersedia
         </p>
       )}
     </div>
   )
 }
+
+
+function calculateDelta(
+  downstream,
+  upstream,
+  digits
+) {
+  if (
+    !Number.isFinite(downstream)
+    || !Number.isFinite(upstream)
+  ) {
+    return null
+  }
+
+  return (
+    downstream - upstream
+  ).toFixed(digits)
+}
+
 
 function DeltaPanel({
   title,
@@ -27,13 +64,25 @@ function DeltaPanel({
   downstream
 }) {
   const deltaPh =
-    (downstream.ph - upstream.ph).toFixed(2)
+    calculateDelta(
+      downstream?.ph,
+      upstream?.ph,
+      2
+    )
 
   const deltaTds =
-    (downstream.tds - upstream.tds).toFixed(0)
+    calculateDelta(
+      downstream?.tds,
+      upstream?.tds,
+      0
+    )
 
   const deltaTurbidity =
-    (downstream.turbidity - upstream.turbidity).toFixed(0)
+    calculateDelta(
+      downstream?.turbidity,
+      upstream?.turbidity,
+      0
+    )
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">

@@ -1,0 +1,22 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "hardware_test": {
+      ".read": "auth != null && (auth.token.tasnim_role === 'admin' || auth.token.tasnim_role === 'manager' || auth.token.tasnim_role === 'viewer')",
+      ".write": false
+    },
+    "simulation": {
+      ".read": "auth != null && (auth.token.tasnim_role === 'admin' || auth.token.tasnim_role === 'manager' || auth.token.tasnim_role === 'viewer')",
+      ".write": false
+    },
+    "real_test": {
+      ".read": "auth != null && (auth.token.tasnim_role === 'admin' || auth.token.tasnim_role === 'manager' || auth.token.tasnim_role === 'viewer')",
+      ".write": false
+    },
+    "field": {
+      ".read": "auth != null && (auth.token.tasnim_role === 'admin' || auth.token.tasnim_role === 'manager' || auth.token.tasnim_role === 'viewer')",
+      ".write": false
+    }
+  }
+}

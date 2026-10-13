@@ -1,7 +1,8 @@
 function ConnectionStateBanner({
   firebaseStatus,
   hasNodes,
-  historyCount = 0
+  historyCount = 0,
+  detail = null
 }) {
 
   if (firebaseStatus === 'online') {
@@ -49,7 +50,7 @@ function ConnectionStateBanner({
 
     return (
 
-      <section className="mb-8 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+      <section role="alert" className="mb-8 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
@@ -59,9 +60,8 @@ function ConnectionStateBanner({
               Koneksi Firebase bermasalah
             </p>
 
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              Periksa koneksi internet, konfigurasi .env,
-              firebase.js, databaseURL, dan Realtime Database Rules.
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              {detail ?? 'Periksa koneksi internet, konfigurasi .env, firebase.js, databaseURL, dan Realtime Database Rules.'}
             </p>
 
           </div>

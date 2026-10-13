@@ -10,6 +10,7 @@ import pandas as pd
 from firebase_admin import credentials, db
 
 from ai.predict import predict_latest
+from ai.check_ai_readiness import audit_slot, WARNING_FLAGS, INFO_FLAGS
 
 
 DATABASE_URL = (
@@ -35,6 +36,7 @@ with CONFIG_PATH.open() as config_file:
 
 DATA_ROOT = TASNIM_CONFIG["activeDataRoot"]
 DATA_MODE = TASNIM_CONFIG["mode"]
+DRY_RUN = False
 
 # Model prototype dilatih dari data simulasi
 # dengan interval pengukuran 5 menit.
@@ -42,6 +44,23 @@ DEMO_INTERVAL_MINUTES = 5
 
 NODES = ["N0", "N1", "N2"]
 PARAMETERS = ["ph", "tds", "turbidity"]
+
+# Root yang history-nya berupa slot 5 menit dari alat (bukan simulasi).
+GATED_ROOTS = ("real_test", "field", "hardware_test")
+
+# Data alat tidak punya meta.session_id. Slot berurutan dianggap satu sesi
+# pengukuran selama jedanya <= 15 menit; lebih dari itu = sesi baru
+# (mis. hari berikutnya), agar rate-of-change tidak melompati malam.
+HARDWARE_SESSION_GAP_MS = 15 * 60 * 1000
+
+_REPORTED_SKIPS = {}
+
+DATA_SOURCE_LABELS = {
+    "simulation": "SIMULATION",
+    "real_test": "REAL_TEST",
+    "field": "FIELD",
+    "hardware_test": "HARDWARE_TEST",
+}
 
 
 def initialize_firebase():
@@ -152,7 +171,25 @@ def load_recent_history(
 
     data = query.get()
 
-    if not data:
+    return history_to_frame(
+        data,
+        DATA_ROOT,
+    )
+
+
+def history_to_frame(
+    data,
+    data_root,
+    verbose=True,
+):
+    """Ubah dict history Firebase menjadi DataFrame input model.
+
+    Fungsi murni (tanpa Firebase) agar bisa dipakai juga untuk analisis
+    CSV microSD secara offline. Return (df, pending_timestamps, time_mode)
+    atau (None, None, None) jika slot valid < 2.
+    """
+
+    if not data or not isinstance(data, dict):
         return None, None, None
 
     rows = []
@@ -166,6 +203,30 @@ def load_recent_history(
             source_timestamp = int(key)
         except (TypeError, ValueError):
             continue
+
+        # Validasi sensor dan kualitas paket sebelum AI.
+        # SIMULATION tetap memakai perilaku sebelumnya.
+        if data_root in GATED_ROOTS:
+            # Flag peringatan (TDS 0 / turbiditas 0) tidak membatalkan
+            # analisis untuk data alat; tetap tampil di website.
+            allowed = (
+                INFO_FLAGS | WARNING_FLAGS
+                if data_root == "hardware_test"
+                else INFO_FLAGS
+            )
+            reasons = audit_slot(key, slot, allowed_flags=allowed)
+
+            if reasons:
+                message = (
+                    f"[AI GATE SKIP] {data_root}/{key}: "
+                    + "; ".join(reasons)
+                )
+                # Loop realtime membaca ulang tiap 5 detik; cetak alasan
+                # yang sama untuk slot yang sama cukup sekali.
+                if verbose and _REPORTED_SKIPS.get(key) != message:
+                    _REPORTED_SKIPS[key] = message
+                    print(message)
+                continue
 
         # Untuk analisis spasial, satu slot harus
         # memiliki N0, N1, dan N2.
@@ -263,6 +324,9 @@ def load_recent_history(
             item["source_timestamp_ms"]
     )
 
+    if data_root == "hardware_test":
+        assign_gap_sessions(rows)
+
     df = pd.DataFrame(rows)
 
     actual_time = pd.to_datetime(
@@ -353,6 +417,80 @@ def load_recent_history(
 
 
 
+def assign_gap_sessions(rows):
+    """Beri session_id berdasarkan jeda antar slot (data alat)."""
+
+    session_id = None
+    previous = None
+
+    for row in rows:
+        timestamp = row["source_timestamp_ms"]
+
+        if (
+            previous is None
+            or timestamp - previous > HARDWARE_SESSION_GAP_MS
+        ):
+            session_id = f"HW_{timestamp}"
+
+        row["session_id"] = session_id
+        previous = timestamp
+
+    return rows
+
+
+def build_analysis_result(
+    input_df,
+    target_timestamp,
+    time_mode,
+    model_bundle,
+    data_root,
+    inference_timestamp_ms=None,
+):
+    """Prediksi untuk satu slot tanpa menulis ke mana pun."""
+
+    target_df = (
+        input_df[
+            input_df["source_timestamp_ms"]
+            <= target_timestamp
+        ]
+        .copy()
+    )
+
+    if target_df.empty:
+        return None
+
+    result = predict_latest(
+        target_df,
+        model_bundle
+    )
+
+    result["location"] = (
+        result.get("location")
+        or "-"
+    )
+
+    result["source_timestamp_ms"] = int(
+        target_timestamp
+    )
+
+    result["inference_timestamp_ms"] = int(
+        inference_timestamp_ms
+        if inference_timestamp_ms is not None
+        else time.time() * 1000
+    )
+
+    # Model masih dilatih dari data simulasi.
+    result["model_stage"] = "PROTOTYPE_SIMULATION"
+    result["model_version"] = "prototype-v1"
+    result["data_source"] = DATA_SOURCE_LABELS.get(
+        data_root,
+        data_root.upper(),
+    )
+    result["time_mode"] = time_mode
+
+    return result
+
+
 def process_pending_record(
     input_df,
     target_timestamp,
@@ -367,80 +505,35 @@ def process_pending_record(
     temporal/rate-of-change mempunyai konteks.
     """
 
-    target_df = (
-        input_df[
-            input_df["source_timestamp_ms"]
-            <= target_timestamp
-        ]
-        .copy()
+    result = build_analysis_result(
+        input_df,
+        target_timestamp,
+        time_mode,
+        model_bundle,
+        DATA_ROOT,
     )
 
-    if target_df.empty:
+    if result is None:
         return None
 
 
-    result = predict_latest(
-        target_df,
-        model_bundle
-    )
-
-
-    result["location"] = (
-        result.get("location")
-        or "-"
-    )
-
-    result[
-        "source_timestamp_ms"
-    ] = int(
-        target_timestamp
-    )
-
-    result[
-        "inference_timestamp_ms"
-    ] = int(
-        time.time() * 1000
-    )
-
-    result[
-        "model_stage"
-    ] = (
-        "PROTOTYPE_SIMULATION"
-        if DATA_ROOT == "simulation"
-        else "FIELD_INFERENCE"
-    )
-
-    result[
-        "model_version"
-    ] = "prototype-v1"
-
-    result[
-        "data_source"
-    ] = (
-        "SIMULATION"
-        if DATA_ROOT == "simulation"
-        else "FIELD"
-    )
-
-    result[
-        "time_mode"
-    ] = time_mode
-
-
-    # Arsip analisis pada timestamp yang tepat.
-    db.reference(
-        f"{DATA_ROOT}/history/"
-        f"{target_timestamp}/analysis"
-    ).set(result)
-
-
-    # /analysis/latest hanya boleh diperbarui jika
-    # record yang sedang diproses memang data terbaru.
-    if write_latest:
-
+    if DRY_RUN:
+        print("[DRY-RUN] Prediksi tidak ditulis ke Firebase")
+    else:
+        # Arsip analisis pada timestamp yang tepat.
         db.reference(
-            f"{DATA_ROOT}/analysis/latest"
+            f"{DATA_ROOT}/history/"
+            f"{target_timestamp}/analysis"
         ).set(result)
+
+
+        # /analysis/latest hanya boleh diperbarui jika
+        # record yang sedang diproses memang data terbaru.
+        if write_latest:
+
+            db.reference(
+                f"{DATA_ROOT}/analysis/latest"
+            ).set(result)
 
 
     rf = result[
@@ -483,7 +576,8 @@ def process_pending_record(
         f"{result['dominant_zscore']['zscore']:.2f}"
     )
     print(
-        "✓ Analysis saved"
+        "✓ Dry-run selesai (tidak disimpan)"
+        if DRY_RUN else "✓ Analysis saved"
     )
 
 
@@ -597,6 +691,8 @@ def recover_full_backlog(
 
 def main():
 
+    global DATA_ROOT, DATA_MODE, DRY_RUN
+
     parser = argparse.ArgumentParser(
         description=(
             "Realtime AI inference TASNIM"
@@ -612,7 +708,32 @@ def main():
         )
     )
 
+    parser.add_argument(
+        "--root",
+        choices=("simulation", "real_test", "hardware_test"),
+        default=None,
+        help="Pilih data root tanpa mengubah tasnim.config.json",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Jalankan analisis tanpa Firebase write",
+    )
+
     args = parser.parse_args()
+
+    # TASNIM_AI_CLI_V1
+    if args.root is not None:
+        DATA_ROOT = args.root
+        DATA_MODE = args.root.upper()
+
+    DRY_RUN = args.dry_run
+
+    print(
+        f"[MODE] root={DATA_ROOT} | "
+        f"dry_run={DRY_RUN}"
+    )
 
 
     print()
@@ -644,6 +765,8 @@ def main():
         model_bundle
     )
 
+    wait_state = None
+
     try:
 
         while True:
@@ -655,20 +778,26 @@ def main():
             ) = load_recent_history()
 
 
+            # Pesan tunggu dicetak sekali per perubahan status,
+            # bukan setiap 5 detik.
             if input_df is None:
 
-                print(
-                    "Menunggu minimal 2 slot "
-                    "history lengkap N0/N1/N2..."
-                )
+                if wait_state != "NO_HISTORY":
+                    print(
+                        "Menunggu minimal 2 slot "
+                        "history lengkap N0/N1/N2..."
+                    )
+                wait_state = "NO_HISTORY"
 
 
             elif not pending_timestamps:
 
-                print(
-                    "Tidak ada record yang "
-                    "menunggu analisis."
-                )
+                if wait_state != "IDLE":
+                    print(
+                        "Tidak ada record yang "
+                        "menunggu analisis."
+                    )
+                wait_state = "IDLE"
 
 
             else:
@@ -686,6 +815,8 @@ def main():
                     ].max()
                 )
 
+
+                wait_state = None
 
                 print()
                 print(

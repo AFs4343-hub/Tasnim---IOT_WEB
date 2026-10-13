@@ -1,0 +1,8 @@
+# Synthetic test fixture in microSD firmware format; NOT field measurements.
+timestamp,node,sequence,ph,tds,turbidity,rssi
+1791811841000,N1,1,7.15,215.0,9.0,-66
+1791812141000,N1,2,7.15,216.0,9.1,-66
+1791812441000,N1,3,7.15,217.0,9.2,-66
+1791812741000,N1,4,7.15,218.0,NA,-66
+1791813041000,N1,5,7.15,219.0,9.4,-66
+1791813341000,N1,6,7.15,220.0,9.5,-66

@@ -10,6 +10,11 @@ import {
 
 import { database } from './services/firebase'
 import tasnimConfig from '../tasnim.config.json'
+import { adaptEmulatorForLegacyDashboard } from './services/demoLegacyAdapter.js'
+import { formatFieldLatestNodes, fieldHistoryRows } from './services/fieldHardwarePreview.js'
+import { SOURCE_HARDWARE } from './services/dataSource.js'
+import { witaTime } from './services/timeFormat.js'
+import { useFirebaseSession, permissionHelp } from './services/useFirebaseSession.js'
 import IoTPerformancePanel from './components/IoTPerformancePanel'
 import TrendChart from './components/TrendChart'
 import NodeCard from './components/NodeCard'
@@ -23,9 +28,23 @@ import SystemOverview from './components/SystemOverview'
 import ConnectionStateBanner from './components/ConnectionStateBanner'
 
 
-const DATA_ROOT = tasnimConfig.activeDataRoot
+const isPermissionDenied = error =>
+  error?.code === 'PERMISSION_DENIED' || error?.code === 'permission_denied'
 
-function App() {
+// dataSource 'hardware_test' = data alat ESP32 asli (read-only, berlaku di
+// dev maupun build produksi); 'simulation' = dashboard dummy lama.
+// Website TIDAK pernah menulis ke Firebase.
+function App({ demoSnapshot, fieldSnapshot, dataSource = SOURCE_HARDWARE } = {}) {
+
+  const FIELD_PREVIEW = dataSource === SOURCE_HARDWARE
+  const DATA_ROOT = FIELD_PREVIEW ? 'hardware_test' : tasnimConfig.activeDataRoot
+  const liveReads = demoSnapshot === undefined && fieldSnapshot === undefined
+
+  // Sesi Firebase anonim otomatis (tanpa form login) untuk Rules
+  // hardware_test yang mensyaratkan auth != null.
+  const session = useFirebaseSession(FIELD_PREVIEW && liveReads)
+  const readsReady = !FIELD_PREVIEW || session.status !== 'checking'
+  const sessionUid = session.uid
 
   // =========================================
   // STATE FIREBASE
@@ -57,14 +76,58 @@ function App() {
   const [firebaseStatus, setFirebaseStatus] =
     useState('connecting')
 
+  // Independent from listener order: a permission denial must never be
+  // masked by a successful callback on a different Firebase path.
+  const [fieldReadError, setFieldReadError] = useState(null)
+
   // Waktu terakhir data terbaru diterima
   const [lastUpdate, setLastUpdate] =
     useState(null)
 
   // Waktu saat ini untuk mengecek status Online/Offline node
   const [currentTime, setCurrentTime] =
-    useState(Date.now())
+    useState(() => Date.now())
 
+
+  // The original dashboard can receive emulator-only data in demo mode.
+  // All LIVE database subscriptions below are disabled when it is provided.
+  useEffect(() => {
+    if (demoSnapshot === undefined) return
+    const next = adaptEmulatorForLegacyDashboard(demoSnapshot, historyLimit)
+    setNodes(next.nodes)
+    setHistory(next.history)
+    setHasMoreHistory(next.hasMoreHistory)
+    setAnalysis(next.analysis)
+    setFirebaseStatus(next.firebaseStatus)
+    // No invented "just updated" timestamp when the demo transport failed.
+    setLastUpdate(demoSnapshot?.demoConnectionState ? null : new Date())
+  }, [demoSnapshot, historyLimit])
+
+  // Local JSON export viewer: no Firebase reads, writes or authentication.
+  // This is a STATIC snapshot, never disguised as realtime history.
+  useEffect(() => {
+    if (fieldSnapshot === undefined) {
+      setFieldReadError(null)
+      return
+    }
+    const rawHistory = fieldSnapshot.history ?? null
+    const rows = fieldHistoryRows(rawHistory, historyLimit)
+    const fileNodes = formatFieldLatestNodes(fieldSnapshot.nodes)
+    setNodes(fileNodes)
+    setHistory(rows)
+    setHasMoreHistory(
+      rawHistory && typeof rawHistory === 'object'
+        ? Object.keys(rawHistory).length > historyLimit
+        : false
+    )
+    setAnalysis(fieldSnapshot.analysis?.latest ?? null)
+    setFirebaseStatus('file')
+    // Untuk file: waktu ukur terakhir di dalam file, bukan waktu dibuka.
+    const newest = Math.max(...Object.values(fileNodes)
+      .map(node => node.timestamp ?? 0))
+    setLastUpdate(newest > 0 ? new Date(newest) : null)
+    setFieldReadError(null)
+  }, [fieldSnapshot, historyLimit])
 
   // =========================================
   // TIMER STATUS NODE
@@ -87,6 +150,7 @@ function App() {
   // =========================================
 
   useEffect(() => {
+    if (!liveReads || !readsReady) return
 
     const nodesRef = ref(database, `${DATA_ROOT}/nodes`)
 
@@ -230,17 +294,15 @@ function App() {
         }
 
 
-        setNodes(formattedNodes)
+        setNodes(FIELD_PREVIEW ? formatFieldLatestNodes(data) : formattedNodes)
 
         setFirebaseStatus('online')
+        if (FIELD_PREVIEW) setFieldReadError(null)
 
         setLastUpdate(new Date())
 
 
-        console.log(
-          'DATA FIREBASE:',
-          formattedNodes
-        )
+        // Never print physical measurements in the browser console.
 
       },
 
@@ -249,10 +311,18 @@ function App() {
 
         console.error(
           'Firebase Error:',
-          error
+          error?.code ?? error
         )
 
         setFirebaseStatus('error')
+        if (FIELD_PREVIEW) {
+          setNodes(null)
+          setHistory([])
+          setAnalysis(null)
+          setFieldReadError(isPermissionDenied(error)
+            ? permissionHelp(session)
+            : 'Firebase hardware_test tidak dapat dibaca. Periksa konfigurasi .env (VITE_FIREBASE_*) dan koneksi internet.')
+        }
 
       }
 
@@ -261,7 +331,9 @@ function App() {
 
     return () => unsubscribe()
 
-  }, [])
+    // session.errorCode dibaca hanya untuk teks bantuan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveReads, readsReady, sessionUid, DATA_ROOT, FIELD_PREVIEW])
 
 
 
@@ -270,6 +342,7 @@ function App() {
   // =========================================
 
   useEffect(() => {
+    if (!liveReads || !readsReady) return
 
     // Ambil 60 timestamp terakhir
     const historyRef = query(
@@ -347,14 +420,8 @@ function App() {
                   numericTimestamp,
 
                 time:
-                  new Date(
+                  witaTime(
                     numericTimestamp
-                  ).toLocaleTimeString(
-                    'id-ID',
-                    {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }
                   ),
 
 
@@ -445,23 +512,24 @@ function App() {
             )
 
 
-        setHistory(formattedHistory)
+        setHistory(FIELD_PREVIEW ? fieldHistoryRows(data, historyLimit) : formattedHistory)
 
 
-        console.log(
-          'HISTORY FIREBASE:',
-          formattedHistory
-        )
+        // History shown only from records actually stored in Firebase.
 
       },
 
 
       (error) => {
 
-        console.error(
-          'History Firebase Error:',
-          error
-        )
+        console.error('History Firebase listener failed:', error?.code ?? 'unknown')
+        if (FIELD_PREVIEW) {
+          setHistory([])
+          setHasMoreHistory(false)
+          setFieldReadError(isPermissionDenied(error)
+            ? permissionHelp(session)
+            : 'History Firebase tidak dapat dibaca.')
+        }
 
       }
 
@@ -470,7 +538,8 @@ function App() {
 
     return () => unsubscribe()
 
-  }, [historyLimit])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyLimit, liveReads, readsReady, sessionUid, DATA_ROOT, FIELD_PREVIEW])
 
 
 
@@ -482,6 +551,11 @@ function App() {
 
     if (!timestamp) {
       return 'Tidak Ada Data'
+    }
+
+    // Data dari file adalah arsip; online/offline tidak bermakna.
+    if (fieldSnapshot !== undefined) {
+      return 'Data File'
     }
 
     const numericTimestamp =
@@ -564,6 +638,337 @@ function App() {
       : null
 
 
+  // =========================================
+  // KELENGKAPAN DATA SLOT TERBARU
+  // =========================================
+
+  const latestHistoryRecord =
+    history.length > 0
+      ? history[
+          history.length - 1
+        ]
+      : null
+
+
+  // =========================================
+  // DATA QUALITY ENGINE
+  //
+  // Menentukan apakah satu slot history layak
+  // dianalisis AI.
+  //
+  // critical:
+  //   masalah yang membuat AI HARUS skip.
+  //
+  // warnings:
+  //   masalah telemetri/non-sensor yang tidak
+  //   membatalkan analisis kualitas air.
+  // =========================================
+
+  const isMissingValue = (
+    value
+  ) => {
+
+    return (
+      value === null
+      || value === undefined
+      || value === ''
+    )
+
+  }
+
+
+  const toFiniteNumber = (
+    value
+  ) => {
+
+    if (isMissingValue(value)) {
+      return null
+    }
+
+    const numeric =
+      Number(value)
+
+    return Number.isFinite(numeric)
+      ? numeric
+      : null
+
+  }
+
+
+  const isSensorValueValid = (
+    parameter,
+    value
+  ) => {
+
+    const numeric =
+      toFiniteNumber(value)
+
+    if (numeric === null) {
+      return false
+    }
+
+
+    // Validasi dasar sesuai kontrak data TASNIM.
+    // BUKAN threshold kualitas air/anomali.
+    if (parameter === 'ph') {
+
+      return (
+        numeric >= 0
+        && numeric <= 14
+      )
+
+    }
+
+
+    if (
+      parameter === 'tds'
+      || parameter === 'turbidity'
+    ) {
+
+      return numeric >= 0
+
+    }
+
+
+    return false
+
+  }
+
+
+  const getDataQuality = (
+    record
+  ) => {
+
+    const critical = []
+    const warnings = []
+
+
+    // -----------------------------------------
+    // SLOT / TIMESTAMP
+    // -----------------------------------------
+
+    if (!record) {
+
+      return {
+        analyzable: false,
+        status: 'NO_DATA',
+        critical: [
+          {
+            node: null,
+            component: 'record',
+            reason: 'MISSING'
+          }
+        ],
+        warnings: []
+      }
+
+    }
+
+
+    const slotTimestamp =
+      toFiniteNumber(
+        record.timestamp
+      )
+
+
+    if (
+      slotTimestamp === null
+      || slotTimestamp <= 0
+    ) {
+
+      critical.push({
+        node: null,
+        component: 'timestamp',
+        reason: 'INVALID_TIME'
+      })
+
+    }
+
+
+    // -----------------------------------------
+    // NODE + SENSOR
+    // -----------------------------------------
+
+    for (
+      const node of ['N0', 'N1', 'N2']
+    ) {
+
+      const nodeData =
+        record?.[node]
+
+
+      if (!nodeData) {
+
+        critical.push({
+          node,
+          component: 'node',
+          reason: 'NODE_MISSING'
+        })
+
+        continue
+
+      }
+
+
+      for (
+        const parameter
+        of ['ph', 'tds', 'turbidity']
+      ) {
+
+        const value =
+          nodeData?.[parameter]
+
+
+        if (
+          isMissingValue(value)
+        ) {
+
+          critical.push({
+            node,
+            component: parameter,
+            reason: 'SENSOR_MISSING'
+          })
+
+          continue
+
+        }
+
+
+        if (
+          !isSensorValueValid(
+            parameter,
+            value
+          )
+        ) {
+
+          critical.push({
+            node,
+            component: parameter,
+            reason: 'INVALID_SENSOR'
+          })
+
+        }
+
+      }
+
+
+      // ---------------------------------------
+      // TELEMETRY
+      // Tidak menghentikan AI.
+      // ---------------------------------------
+
+      if (
+        isMissingValue(
+          nodeData.rssi
+        )
+        || toFiniteNumber(
+          nodeData.rssi
+        ) === null
+      ) {
+
+        warnings.push({
+          node,
+          component: 'rssi',
+          reason: 'TELEMETRY_MISSING'
+        })
+
+      }
+
+
+      if (
+        isMissingValue(
+          nodeData.sequence
+        )
+        || toFiniteNumber(
+          nodeData.sequence
+        ) === null
+      ) {
+
+        warnings.push({
+          node,
+          component: 'sequence',
+          reason: 'TELEMETRY_MISSING'
+        })
+
+      }
+
+    }
+
+
+    // -----------------------------------------
+    // STATUS UTAMA
+    // -----------------------------------------
+
+    let status =
+      'COMPLETE'
+
+
+    if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'INVALID_TIME'
+      )
+    ) {
+
+      status =
+        'INVALID_TIME'
+
+    } else if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'NODE_MISSING'
+      )
+    ) {
+
+      status =
+        'NODE_MISSING'
+
+    } else if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'SENSOR_MISSING'
+      )
+    ) {
+
+      status =
+        'SENSOR_MISSING'
+
+    } else if (
+      critical.some(
+        issue =>
+          issue.reason
+          === 'INVALID_SENSOR'
+      )
+    ) {
+
+      status =
+        'INVALID_SENSOR'
+
+    }
+
+
+    return {
+      analyzable:
+        critical.length === 0,
+
+      status,
+
+      critical,
+      warnings
+    }
+
+  }
+
+
+  const latestDataQuality =
+    getDataQuality(
+      latestHistoryRecord
+    )
+
+
   useEffect(() => {
 
     const latestTimestamp =
@@ -574,6 +979,26 @@ function App() {
             ]?.timestamp
           )
         : null
+
+    const dataQuality =
+      getDataQuality(
+        latestHistoryRecord
+      )
+
+
+    // Slot yang tidak layak dianalisis memang
+    // sengaja dilewati AI.
+    // Jangan dianggap sebagai AI mismatch/stale.
+    if (!dataQuality.analyzable) {
+
+      setAnalysisMismatchSince(
+        null
+      )
+
+      return
+
+    }
+
 
     const aiTimestamp =
       analysis?.source_timestamp_ms != null
@@ -608,6 +1033,18 @@ function App() {
 
 
   const getAnalysisSyncState = () => {
+
+    if (!latestHistoryRecord) {
+      return 'NO_HISTORY'
+    }
+
+
+    if (
+      !latestDataQuality.analyzable
+    ) {
+      return 'INCOMPLETE_DATA'
+    }
+
 
     if (!analysis) {
       return 'NO_ANALYSIS'
@@ -679,6 +1116,7 @@ function App() {
   // =========================================
 
   useEffect(() => {
+    if (!liveReads || !readsReady) return
 
     const analysisRef = ref(
       database,
@@ -701,17 +1139,51 @@ function App() {
       },
 
       (error) => {
-        console.error(
-          'AI Firebase Error:',
-          error
-        )
+        console.error('AI Firebase listener failed:', error?.code ?? 'unknown')
+        if (FIELD_PREVIEW) {
+          setAnalysis(null)
+          setFieldReadError(isPermissionDenied(error)
+            ? permissionHelp(session)
+            : 'Hasil AI Firebase tidak dapat dibaca.')
+        }
       }
     )
 
     return () => unsubscribe()
 
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveReads, readsReady, sessionUid, DATA_ROOT, FIELD_PREVIEW])
 
+
+
+  const sourceBadge = demoSnapshot !== undefined
+    ? {
+        title: 'Demo Emulator',
+        note: 'Data sintetis lokal, bukan Firebase LIVE',
+        className: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
+        dot: 'bg-violet-400'
+      }
+    : fieldSnapshot !== undefined
+      ? {
+          title: 'File lokal (CSV/JSON)',
+          note: 'Tidak diunggah · bukan real-time · waktu WITA',
+          className: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+          dot: 'bg-amber-400'
+        }
+      : FIELD_PREVIEW
+        ? {
+            title: 'Data Alat · hardware_test',
+            note: 'ESP32 N0/N1/N2 · real-time · hanya baca · waktu WITA',
+            className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+            dot: firebaseStatus === 'online' && !fieldReadError
+              ? 'animate-pulse bg-emerald-400' : 'bg-slate-500'
+          }
+        : {
+            title: 'Simulasi · simulation',
+            note: 'Data dummy simulator — bukan hasil pengukuran',
+            className: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
+            dot: 'bg-violet-400'
+          }
 
 
   return (
@@ -725,20 +1197,41 @@ function App() {
             HEADER
         ================================= */}
 
-        <header className="mb-7 sm:mb-10">
+        {FIELD_PREVIEW && demoSnapshot === undefined && fieldSnapshot !== undefined && <div role="status"
+          className="mb-5 rounded-xl border border-amber-600/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-100">
+          FILE LOKAL (CSV/JSON) — dibaca di browser ini saja, tidak diunggah
+          dan bukan sinkronisasi Firebase real-time. Grafik dan History hanya
+          berisi baris yang ada di file; tidak ada data atau hasil AI yang dibuat-buat.
+        </div>}
 
-          <p className="text-sm font-semibold tracking-widest text-cyan-400">
-            MULTI-NODE IoT-WEB
-          </p>
+        <header className="mb-7 flex flex-col gap-6 sm:mb-10 lg:flex-row lg:items-end lg:justify-between">
 
-          <h1 className="mt-2 text-4xl font-bold sm:text-5xl">
-            TASNIM
-          </h1>
+          <div>
 
-          <p className="mt-3 max-w-3xl text-slate-400">
-            Surveilans Kualitas Air Irigasi Budidaya Ikan
-            melalui pemantauan multi-node secara real-time.
-          </p>
+            <p className="text-sm font-semibold tracking-widest text-cyan-400">
+              MULTI-NODE IoT-WEB
+            </p>
+
+            <h1 className="mt-2 text-4xl font-bold sm:text-5xl">
+              TAS<span className="text-cyan-400">[N]</span>IM
+            </h1>
+
+            <p className="mt-3 max-w-3xl text-slate-400">
+              Surveilans Kualitas Air Irigasi Budidaya Ikan
+              melalui pemantauan multi-node N0 → N1/N2 secara real-time.
+            </p>
+
+          </div>
+
+          <div className={`w-fit rounded-2xl border px-4 py-3 text-sm ${sourceBadge.className}`}>
+            <p className="flex items-center gap-2 font-semibold">
+              <span className={`h-2.5 w-2.5 rounded-full ${sourceBadge.dot}`} />
+              {sourceBadge.title}
+            </p>
+            <p className="mt-1 text-xs opacity-80">
+              {sourceBadge.note}
+            </p>
+          </div>
 
         </header>
 
@@ -759,7 +1252,8 @@ function App() {
         <section id="status" className="scroll-mt-28 mb-8">
 
           <SystemOverview
-            firebaseStatus={firebaseStatus}
+            demoMode={demoSnapshot !== undefined}
+            firebaseStatus={fieldReadError ? 'error' : firebaseStatus}
             lastUpdate={lastUpdate}
             nodes={nodesWithStatus}
             historyCount={history.length}
@@ -773,9 +1267,10 @@ function App() {
         ================================= */}
 
         <ConnectionStateBanner
-          firebaseStatus={firebaseStatus}
+          firebaseStatus={fieldReadError ? 'error' : firebaseStatus}
           hasNodes={Boolean(nodesWithStatus)}
           historyCount={history.length}
+          detail={FIELD_PREVIEW ? fieldReadError : null}
         />
 
 
@@ -843,6 +1338,29 @@ function App() {
 
 
 
+        {FIELD_PREVIEW && liveReads && nodesWithStatus && !fieldReadError
+          && firebaseStatus === 'online' && history.length === 0 && (
+          <section role="status"
+            className="mt-8 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-5 text-sm leading-6 text-slate-300">
+            <p className="font-semibold text-cyan-300">
+              Data terbaru alat sudah masuk, tetapi history di Firebase masih kosong
+            </p>
+            <p className="mt-1">
+              Firmware saat ini hanya mengirim <code>hardware_test/nodes/Nx/latest</code>.
+              Grafik, statistik, History dan AI akan terisi otomatis begitu
+              <code> hardware_test/history</code> berisi slot 5 menit. Caranya (pilih salah satu):
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-slate-400">
+              <li>Jalankan perekam history di laptop/Codespaces:
+                <code className="ml-1 text-slate-200">python3 -m iot.hardware_test_history_recorder --write</code></li>
+              <li>Impor CSV microSD:
+                <code className="ml-1 text-slate-200">python3 scripts/import_sd_csv.py tasnim_N0.csv tasnim_N1.csv tasnim_N2.csv --write</code></li>
+              <li>Atau lihat CSV langsung di website lewat tombol <strong>Buka CSV/JSON</strong> di atas (tanpa upload).</li>
+            </ol>
+          </section>
+        )}
+
+
         {/* =================================
             GRAFIK RIWAYAT
         ================================= */}
@@ -850,7 +1368,7 @@ function App() {
         <section id="grafik" className="scroll-mt-28 mt-8">
 
           <TrendChart
-            data={history.slice(-24)}
+            data={history}
           />
 
         </section>
@@ -959,6 +1477,7 @@ function App() {
           <AnomalyPanel
             analysis={analysis}
             syncState={analysisSyncState}
+            dataQuality={latestDataQuality}
           />
 
         </section>
@@ -1010,11 +1529,11 @@ function App() {
           <div className="flex flex-col gap-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
 
             <p>
-              TASNIM — Multi-Node IoT-Web
+              TAS[N]IM — Multi-Node IoT-Web · Sistem Surveilans Kualitas Air Irigasi
             </p>
 
             <p>
-              Sistem Surveilans Kualitas Air Irigasi
+              Website hanya membaca data · Model AI: prototipe (dilatih data simulasi)
             </p>
 
           </div>

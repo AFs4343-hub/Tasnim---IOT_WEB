@@ -1,0 +1,161 @@
+// Read-only presenter for ACTUAL legacy ESP32 N0/N1/N2 Firebase snapshots.
+// The deployed sensor firmware currently sends timestamp/sequence/sensor
+// fields WITHOUT the V2 metadata. Do not invent history or predictions.
+// This is separate from the strict canonical V2 test/AI contract.
+export const FIELD_NODE_IDS = Object.freeze(['N0', 'N1', 'N2'])
+export const FIELD_SLOT_MS = 300_000
+// 6 hari × 24 jam × 12 slot = 1728; beri ruang untuk sesi lebih panjang.
+export const MAX_HISTORY_ROWS = 5000
+const MIN_MS = 1_704_067_200_000
+const LOCATIONS = Object.freeze({
+  N0: 'Hulu / Baseline',
+  N1: 'Cabang Irigasi 1',
+  N2: 'Cabang Irigasi 2',
+})
+const VALID = {
+  ph: n => n >= 0 && n <= 14,
+  tds: n => n >= 0 && n <= 5000,
+  turbidity: n => n >= 0 && n < 3000,
+}
+const number = n => typeof n === 'number' && Number.isFinite(n) ? n : null
+const INFO_FLAG = 'BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED'
+const KNOWN_FLAGS = new Set([
+  INFO_FLAG,
+  'TDS_ZERO_CHECK_CLAMP', 'TURB_ZERO_VERIFY',
+  'PH_INVALID', 'TDS_INVALID', 'TURB_INVALID_OR_MISSING', 'TURB_SATURATED',
+])
+
+export function readFieldNode(raw, node) {
+  if (!FIELD_NODE_IDS.includes(node) || !raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const timestamp = raw.timestamp
+  if (!Number.isSafeInteger(timestamp) || timestamp < MIN_MS ||
+      (raw.node_id !== undefined && raw.node_id !== node) ||
+      (raw.schema_version !== undefined && raw.schema_version !== 2)) return null
+  const sequence = raw.sequence
+  if (sequence !== undefined && (!Number.isSafeInteger(sequence) || sequence < 0)) return null
+  const warnings = []
+  const values = {}
+  for (const [sensor, valid] of Object.entries(VALID)) {
+    const value = number(raw[sensor])
+    values[sensor] = value !== null && valid(value) ? value : null
+    if (values[sensor] === null) warnings.push(sensor.toUpperCase() + '_INVALID')
+    else if (sensor === 'tds' && value === 0) warnings.push('TDS_ZERO_CHECK_CLAMP')
+    else if (sensor === 'turbidity' && value === 0) warnings.push('TURB_ZERO_VERIFY')
+  }
+  const rawFlags = Array.isArray(raw.quality_flags) ? raw.quality_flags : []
+  if (raw.quality_flags !== undefined && !Array.isArray(raw.quality_flags)) return null
+  // Flag yang dikenal: peringatan (nilai tetap ditampilkan) atau penanda
+  // nilai hilang (field-nya memang tidak ada). Flag lain yang tidak dikenal
+  // tetap membuat semua nilai node disembunyikan untuk ditinjau.
+  for (const flag of rawFlags) {
+    if (KNOWN_FLAGS.has(flag)) {
+      if (flag !== INFO_FLAG && !warnings.includes(flag)) warnings.push(flag)
+      continue
+    }
+    if (!warnings.includes('QUALITY_FLAGS_REVIEW')) warnings.push('QUALITY_FLAGS_REVIEW')
+    for (const key of Object.keys(values)) values[key] = null
+  }
+  // Nilai sensor yang hilang sudah dicatat sebagai <SENSOR>_INVALID.
+  const deduped = warnings.filter(w => !(w === 'TURB_INVALID_OR_MISSING' && warnings.includes('TURBIDITY_INVALID')))
+  warnings.length = 0
+  warnings.push(...deduped)
+  return {
+    node, node_id: node, location: LOCATIONS[node], timestamp,
+    lastSeen: timestamp, sequence: sequence ?? null,
+    rssi: number(raw.rssi), hasData: true,
+    latitude: number(raw.latitude), longitude: number(raw.longitude),
+    qualityWarnings: warnings, verified: false,
+    ...values,
+  }
+}
+
+export function formatFieldLatestNodes(data) {
+  const result = {}
+  for (const node of FIELD_NODE_IDS) {
+    const point = readFieldNode(data?.[node]?.latest, node)
+    result[node] = point ?? {
+      node, location: LOCATIONS[node],
+      ph: null, tds: null, turbidity: null, timestamp: null,
+      lastSeen: null, sequence: null, rssi: null, hasData: false,
+      qualityWarnings: ['NO_VALID_DATA'], verified: false,
+    }
+  }
+  return result
+}
+
+// A local Firebase Console export is parsed only in the browser and never
+// uploaded. Keep ONLY the three read-only dashboard paths, so an accidental
+// full database export cannot expose private branches through this UI.
+export function selectFieldHardwareExport(parsed) {
+  const selected = parsed?.hardware_test ?? parsed
+  if (!selected || typeof selected !== 'object' || Array.isArray(selected) ||
+      !selected.nodes || typeof selected.nodes !== 'object' ||
+      !FIELD_NODE_IDS.some(id => selected.nodes?.[id]?.latest)) {
+    throw new Error('JSON harus berisi hardware_test/nodes/N0–N2/latest.')
+  }
+  return {
+    nodes: Object.fromEntries(FIELD_NODE_IDS.map(id => [
+      id, { latest: selected.nodes[id]?.latest ?? null },
+    ])),
+    history: selected.history ?? null,
+    analysis: selected.analysis?.latest
+      ? { latest: selected.analysis.latest } : null,
+  }
+}
+
+// Read actual persisted 5-min Firebase history. Never synthesize missing
+// slots from /latest: those are separate measurements, not stored history.
+export function fieldHistoryRows(rawHistory, limit = 60) {
+  if (!rawHistory || typeof rawHistory !== 'object' || Array.isArray(rawHistory)) return []
+  return Object.entries(rawHistory)
+    .filter(([key, value]) => {
+      const slot = Number(key)
+      return String(slot) === key && Number.isSafeInteger(slot) &&
+        slot >= MIN_MS && slot % FIELD_SLOT_MS === 0 &&
+        value && typeof value === 'object' && !Array.isArray(value)
+    })
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .slice(-Math.max(1, Math.min(limit, MAX_HISTORY_ROWS)))
+    .map(([key, source]) => {
+      const slot = Number(key)
+      const row = {
+        timestamp: slot,
+        time: new Date(slot).toLocaleTimeString('id-ID', {
+          hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
+        }),
+        analysis: null, meta: {
+          data_source: 'HARDWARE_TEST', mode: 'FIELD_PREVIEW_UNVERIFIED',
+        },
+      }
+      for (const node of FIELD_NODE_IDS) {
+        const point = readFieldNode(source[node], node)
+        const valid = point && Math.floor(point.timestamp / FIELD_SLOT_MS) * FIELD_SLOT_MS === slot
+        row[node] = valid ? point : null
+        for (const sensor of Object.keys(VALID)) row[node + '_' + sensor] = valid ? point[sensor] : null
+      }
+      // Analysis displayed only if it is actually present; never infer AI.
+      if (source.analysis && typeof source.analysis === 'object' &&
+          source.analysis.model_stage === 'PROTOTYPE_SIMULATION' &&
+          source.analysis.data_source === 'HARDWARE_TEST' &&
+          source.analysis.source_timestamp_ms === slot) row.analysis = source.analysis
+      return row
+    })
+}
+
+
+const WARNING_LABELS = {
+  PH_INVALID: 'pH di luar 0–14 / tidak terbaca',
+  TDS_INVALID: 'TDS tidak terbaca',
+  TURBIDITY_INVALID: 'turbiditas tidak terbaca',
+  TURB_INVALID_OR_MISSING: 'turbiditas tidak terbaca',
+  TURB_SATURATED: 'turbiditas jenuh (batas sensor)',
+  TDS_ZERO_CHECK_CLAMP: 'TDS = 0 (cek sensor / clamp)',
+  TURB_ZERO_VERIFY: 'turbiditas = 0 (perlu verifikasi)',
+  QUALITY_FLAGS_REVIEW: 'flag kualitas perlu ditinjau',
+  NO_VALID_DATA: 'belum ada data valid',
+}
+
+// Label manusiawi untuk kode peringatan kualitas data.
+export function describeQualityWarning(code) {
+  return WARNING_LABELS[code] ?? code
+}

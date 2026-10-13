@@ -1,8 +1,40 @@
+import { witaDateTime } from '../services/timeFormat.js'
+
+function SmallCard({
+  title,
+  value,
+  note
+}) {
+
+  return (
+
+    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+
+      <p className="text-xs text-slate-500">
+        {title}
+      </p>
+
+      <p className="mt-2 text-2xl font-semibold text-white">
+        {value}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-600">
+        {note}
+      </p>
+
+    </div>
+
+  )
+
+}
+
+
 function SystemOverview({
   firebaseStatus,
   lastUpdate,
   nodes,
-  historyCount = 0
+  historyCount = 0,
+  demoMode = false
 }) {
 
   const nodeList =
@@ -33,6 +65,12 @@ function SystemOverview({
 
 
   const statusConfig = {
+    file: {
+      title: 'Pratinjau File Lokal',
+      label: 'CSV/JSON — bukan Firebase Live',
+      className: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
+      dot: 'bg-amber-400'
+    },
 
     connecting: {
       title: 'Menghubungkan...',
@@ -74,8 +112,9 @@ function SystemOverview({
 
 
   const current =
-    statusConfig[firebaseStatus]
-    ?? statusConfig.connecting
+    demoMode && firebaseStatus === 'online'
+      ? { ...statusConfig.online, label: 'Firebase Emulator' }
+      : (statusConfig[firebaseStatus] ?? statusConfig.connecting)
 
 
   const formatUpdate = () => {
@@ -85,46 +124,7 @@ function SystemOverview({
     }
 
 
-    return lastUpdate
-      .toLocaleString(
-        'id-ID',
-        {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          day: '2-digit',
-          month: 'short'
-        }
-      )
-
-  }
-
-
-  function SmallCard({
-    title,
-    value,
-    note
-  }) {
-
-    return (
-
-      <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-
-        <p className="text-xs text-slate-500">
-          {title}
-        </p>
-
-        <p className="mt-2 text-2xl font-semibold text-white">
-          {value}
-        </p>
-
-        <p className="mt-1 text-xs text-slate-600">
-          {note}
-        </p>
-
-      </div>
-
-    )
+    return witaDateTime(lastUpdate.getTime())
 
   }
 
@@ -148,7 +148,7 @@ function SystemOverview({
           </h2>
 
           <p className="mt-2 text-sm text-slate-400">
-            Update terakhir: {formatUpdate()}
+            {firebaseStatus === 'file' ? 'Data terakhir di file' : 'Update terakhir'}: {formatUpdate()}
           </p>
 
         </div>
@@ -173,11 +173,19 @@ function SystemOverview({
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
-        <SmallCard
-          title="Node Online"
-          value={`${onlineCount} / 3`}
-          note="Aktif berdasarkan timestamp"
-        />
+        {firebaseStatus === 'file' ? (
+          <SmallCard
+            title="Node di File"
+            value={`${nodeList.filter(node => node.status === 'Data File').length} / 3`}
+            note="Node yang punya data di file"
+          />
+        ) : (
+          <SmallCard
+            title="Node Online"
+            value={`${onlineCount} / 3`}
+            note="Aktif berdasarkan timestamp"
+          />
+        )}
 
         <SmallCard
           title="Node Offline"
