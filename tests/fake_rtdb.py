@@ -60,4 +60,9 @@ class FakeRef:
             self.db.set_path(self.parts + key.split("/"), value)
 
     def set(self, value):
+        if value is None:  # sama seperti firebase_admin
+            raise ValueError("Value must not be None.")
         self.db.set_path(self.parts, value)
+
+    def delete(self):
+        self.db.set_path(self.parts, None)

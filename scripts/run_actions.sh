@@ -17,6 +17,8 @@ case "${1:-}" in
     "${GH[@]}" workflow run tasnim-sesi-live.yml --ref "$BRANCH" -f durasi_jam="${2:-3}" ;;
   impor)
     "${GH[@]}" workflow run tasnim-impor-csv.yml --ref "$BRANCH" -f folder="${2:-data/sd}" -f mode="${3:-tulis}" ;;
+  hapus)
+    echo "Untuk hapus data pakai langsung: python3 scripts/hapus_data.py --help"; exit 1 ;;
   *)
     echo "Pakai: bash scripts/run_actions.sh live <jam> | impor [folder] [tulis|cek]"; exit 1 ;;
 esac

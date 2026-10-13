@@ -84,6 +84,7 @@ jobs:
             test_field_legacy_history_capture_v1.py \
             test_hardware_test_history_recorder.py \
             test_hardware_test_csv_import.py \
+            test_hardware_test_delete.py \
             test_realtime_inference_hardware_root.py \
             test_web_anonymous_rules_candidate.py \
             test_firebase_project_setup.py \

@@ -34,6 +34,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from iot.hardware_test_contract_v2 import ContractError, NODE_IDS, SLOT_MS
+from iot.hardware_test_delete import is_deleted, load_deleted_ranges
 from iot.hardware_test_ingestion_core import stored_packet_matches
 from iot.hardware_test_legacy_history_capture_v1 import (
     FieldCaptureRejected, normalize_legacy_observation,
@@ -112,7 +113,7 @@ def store_packet(db, slot, node, packet):
     return "SLOT_TAKEN"
 
 
-def record_once(db, *, now_ms=None, write=False, seen=None):
+def record_once(db, *, now_ms=None, write=False, seen=None, deleted_ranges=()):
     """Satu putaran: baca ketiga latest, arsipkan yang baru.
 
     ``seen`` (dict node → (timestamp, sequence)) mencegah transaksi ulang
@@ -135,6 +136,9 @@ def record_once(db, *, now_ms=None, write=False, seen=None):
             outcomes[node] = ("REVIEW_REQUIRED", None, str(exc))
             continue
         identity = (packet["timestamp"], packet["sequence"])
+        if deleted_ranges and is_deleted(deleted_ranges, slot, node):
+            outcomes[node] = ("DELETED_RANGE", slot, packet)
+            continue
         if seen.get(node) == identity:
             outcomes[node] = ("UNCHANGED", slot, packet)
             continue
@@ -191,6 +195,7 @@ def _describe(node, outcome):
         "DUPLICATE": "SUDAH ADA",
         "SLOT_TAKEN": "SLOT TERISI",
         "WOULD_CAPTURE": "DRY-RUN",
+        "DELETED_RANGE": "DAFTAR HAPUS",
     }.get(state, state)
     return (f"{node} | {label:<11}| slot {wita(slot)} | ukur {wita(packet['timestamp'])}"
             f" | seq={packet['sequence']} {values}" + (f" | flag={flags}" if flags else ""))
@@ -217,10 +222,16 @@ def main(argv=None):
     print("TAS[N]IM perekam history hardware_test")
     print(f"[MODE] {mode} | interval {args.interval:g} s | Ctrl+C untuk berhenti")
     seen = {}
+    deleted_ranges, ranges_loaded_at = [], 0.0
     try:
         while True:
             try:
-                outcomes = record_once(db, write=args.write, seen=seen)
+                # Daftar hapus dimuat ulang tiap 10 menit.
+                if time.monotonic() - ranges_loaded_at > 600 or not ranges_loaded_at:
+                    deleted_ranges = load_deleted_ranges(db)
+                    ranges_loaded_at = time.monotonic()
+                outcomes = record_once(db, write=args.write, seen=seen,
+                                       deleted_ranges=deleted_ranges)
             except Exception as exc:  # jaringan putus dsb.: coba lagi
                 print(f"[WARN] Gagal membaca/menulis Firebase: {type(exc).__name__}: {exc}",
                       file=sys.stderr)

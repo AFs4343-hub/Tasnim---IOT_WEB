@@ -64,7 +64,7 @@ jobs:
           echo "Ditemukan ${#files[@]} file:"; cat csv_list.txt
 
       - name: Kunci service account (secret)
-        if: inputs.mode == 'tulis'
+        # Juga dipakai mode cek: membaca daftar hapus (tanpa menulis).
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
