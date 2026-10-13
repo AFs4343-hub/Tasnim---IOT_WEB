@@ -1,0 +1,87 @@
+name: TASNIM sesi live (rekam history + AI)
+
+# Tombol manual saat sesi pengukuran: GitHub → Actions → "TASNIM sesi live" →
+# Run workflow → pilih durasi. Selama berjalan, setiap pengukuran latest
+# N0/N1/N2 disimpan ke hardware_test/history (slot 5 menit) dan dianalisis AI;
+# website (Data Alat) ikut ter-update. Hentikan lebih awal: tombol "Cancel run".
+# Butuh secret FIREBASE_SERVICE_ACCOUNT. Batas GitHub: maks ±5 jam 45 menit/run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      durasi_jam:
+        description: 'Lama sesi (jam). 6 = maksimum ±5 jam 45 menit'
+        required: true
+        type: choice
+        default: '3'
+        options: ['1', '2', '3', '4', '5', '6']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tasnim-sesi-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Perekam history + AI realtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      DURASI: ${{ inputs.durasi_jam }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ai/requirements.txt
+
+      - name: Pasang dependensi Python
+        run: python -m pip install -r ai/requirements.txt
+
+      - name: Kunci service account (secret)
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [[ -z "$SA" ]]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT belum diisi. Lihat docs/OPERASIONAL_HARIAN.md bagian Persiapan."; exit 1
+          fi
+          umask 077
+          printf '%s' "$SA" > iot/serviceAccountKey.json
+          python -c "import json; d=json.load(open('iot/serviceAccountKey.json')); assert d.get('type')=='service_account'"
+
+      - name: Siapkan model AI prototipe (seed tetap)
+        run: |
+          python -m ai.generate_data > /dev/null
+          python -m ai.train_models > /dev/null
+
+      - name: Sesi live berjalan
+        run: |
+          minutes=$(( DURASI * 60 ))
+          (( minutes > 345 )) && minutes=345
+          echo "Sesi live selama ${minutes} menit (Cancel run untuk berhenti lebih awal)."
+          set +e
+          timeout --signal=INT --kill-after=60 "${minutes}m" \
+            python -u scripts/run_hardware_test_stack.py --write
+          code=$?
+          if [[ $code -eq 124 || $code -eq 0 ]]; then
+            echo "Sesi selesai sesuai durasi."; exit 0
+          fi
+          exit $code
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          {
+            echo "## Sesi live selesai"
+            echo "Durasi dipilih: ${DURASI} jam."
+            echo "Cek website → Data Alat → Grafik / Kinerja IoT / Riwayat."
+            echo "Pengukuran saat sesi ini tidak berjalan dapat dilengkapi dari CSV microSD (workflow impor CSV)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hapus kunci dari runner
+        if: always()
+        run: rm -f iot/serviceAccountKey.json

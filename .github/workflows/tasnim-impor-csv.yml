@@ -1,0 +1,125 @@
+name: TASNIM impor CSV microSD + AI
+
+# Tombol manual: GitHub → Actions → "TASNIM impor CSV microSD + AI" → Run workflow.
+# 1. Upload CSV ke folder data/sd/ (Add file → Upload files) di branch ini.
+# 2. Jalankan workflow ini. Hasil langsung tampil di website (Data Alat).
+# Hanya mengisi slot history yang KOSONG; tidak menimpa data, tidak mengubah
+# nodes/latest maupun Rules. Butuh secret FIREBASE_SERVICE_ACCOUNT.
+
+on:
+  workflow_dispatch:
+    inputs:
+      folder:
+        description: 'Folder CSV di repo (mis. data/sd atau data/sd/2026-10-14)'
+        required: true
+        default: 'data/sd'
+      mode:
+        description: 'tulis = simpan ke Firebase + AI; cek = hanya periksa (tidak menulis)'
+        required: true
+        type: choice
+        default: tulis
+        options:
+          - tulis
+          - cek
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tasnim-impor-csv
+  cancel-in-progress: false
+
+jobs:
+  impor:
+    name: Impor CSV → hardware_test/history → AI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FOLDER: ${{ inputs.folder }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ai/requirements.txt
+
+      - name: Pasang dependensi Python
+        run: python -m pip install -r ai/requirements.txt
+
+      - name: Cari file CSV
+        id: files
+        run: |
+          set -euo pipefail
+          if [[ ! "$FOLDER" =~ ^data/[A-Za-z0-9_./-]*$ || "$FOLDER" == *..* ]]; then
+            echo "::error::Folder harus di dalam data/ (contoh data/sd)"; exit 1
+          fi
+          mapfile -t files < <(find "$FOLDER" -type f \( -iname '*.csv' -o -iname '*.txt' \) | sort)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::Tidak ada file .csv di $FOLDER. Upload dulu lewat Add file → Upload files."; exit 1
+          fi
+          printf '%s\n' "${files[@]}" > csv_list.txt
+          echo "Ditemukan ${#files[@]} file:"; cat csv_list.txt
+
+      - name: Kunci service account (secret)
+        if: inputs.mode == 'tulis'
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [[ -z "$SA" ]]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT belum diisi. Lihat docs/OPERASIONAL_HARIAN.md bagian Persiapan."; exit 1
+          fi
+          umask 077
+          printf '%s' "$SA" > iot/serviceAccountKey.json
+          python -c "import json; d=json.load(open('iot/serviceAccountKey.json')); assert d.get('type')=='service_account'"
+
+      - name: Siapkan model AI prototipe (seed tetap)
+        run: |
+          python -m ai.generate_data > /dev/null
+          python -m ai.train_models > /dev/null
+
+      - name: Impor CSV
+        run: |
+          set -o pipefail
+          mapfile -t files < csv_list.txt
+          extra=()
+          [[ "$MODE" == "tulis" ]] && extra+=(--write)
+          python scripts/import_sd_csv.py "${files[@]}" --out-json hasil_impor.json --analyze "${extra[@]}" | tee impor.log
+
+      - name: AI menganalisis seluruh backlog di Firebase
+        if: inputs.mode == 'tulis'
+        run: |
+          set -o pipefail
+          python -u -m ai.realtime_inference --root hardware_test --once | tee ai.log | tail -n 30
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          {
+            echo "## Impor CSV — mode: $MODE"
+            echo '```'
+            cat impor.log 2>/dev/null || echo "(impor tidak berjalan)"
+            echo '```'
+            if [[ -f ai.log ]]; then
+              echo "### AI"
+              echo '```'
+              grep -E "Recovery|PROCESSING|Status|selesai|Menunggu|GATE SKIP" ai.log | tail -n 40 || true
+              echo '```'
+            fi
+            echo "Buka website → Data Alat untuk melihat grafik, Riwayat dan AI."
+            echo "File **hasil_impor.json** (Artifacts di bawah) bisa dibuka lewat tombol *Buka CSV/JSON*."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hasil_impor
+          path: hasil_impor.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Hapus kunci dari runner
+        if: always()
+        run: rm -f iot/serviceAccountKey.json

@@ -76,6 +76,7 @@ it must not be pointed at a public Firebase project.
 ## Website dengan data alat (hardware_test) — mulai di sini
 
 **Panduan lengkap (Bahasa Indonesia): [docs/PANDUAN_WEBSITE_DATA_ALAT.md](docs/PANDUAN_WEBSITE_DATA_ALAT.md).**
+**Operasional harian tanpa terminal: [docs/OPERASIONAL_HARIAN.md](docs/OPERASIONAL_HARIAN.md)** (website di Firebase Hosting, tombol GitHub Actions untuk sesi live dan impor CSV).
 
 - The dashboard opens on **Data Alat (Firebase)**: read-only, real-time
   `hardware_test/nodes`, `history` and `analysis`, in development and in

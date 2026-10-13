@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - infra/field-data
+    paths-ignore:
+      - 'data/**'
   workflow_dispatch:
 
 permissions:

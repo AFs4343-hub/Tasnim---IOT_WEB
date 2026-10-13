@@ -26,6 +26,8 @@ tercampur**; pilih lewat tombol **Data Alat / Simulasi** di atas dashboard.
 
 ---
 
+> **Pemakaian sehari-hari tanpa terminal:** lihat [OPERASIONAL_HARIAN.md](OPERASIONAL_HARIAN.md).
+
 ## 0. Cara tercepat — satu perintah di terminal Codespaces
 
 ```bash

@@ -765,6 +765,8 @@ def main():
         model_bundle
     )
 
+    wait_state = None
+
     try:
 
         while True:
@@ -776,20 +778,26 @@ def main():
             ) = load_recent_history()
 
 
+            # Pesan tunggu dicetak sekali per perubahan status,
+            # bukan setiap 5 detik.
             if input_df is None:
 
-                print(
-                    "Menunggu minimal 2 slot "
-                    "history lengkap N0/N1/N2..."
-                )
+                if wait_state != "NO_HISTORY":
+                    print(
+                        "Menunggu minimal 2 slot "
+                        "history lengkap N0/N1/N2..."
+                    )
+                wait_state = "NO_HISTORY"
 
 
             elif not pending_timestamps:
 
-                print(
-                    "Tidak ada record yang "
-                    "menunggu analisis."
-                )
+                if wait_state != "IDLE":
+                    print(
+                        "Tidak ada record yang "
+                        "menunggu analisis."
+                    )
+                wait_state = "IDLE"
 
 
             else:
@@ -807,6 +815,8 @@ def main():
                     ].max()
                 )
 
+
+                wait_state = None
 
                 print()
                 print(
