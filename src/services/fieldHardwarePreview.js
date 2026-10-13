@@ -4,6 +4,8 @@
 // This is separate from the strict canonical V2 test/AI contract.
 export const FIELD_NODE_IDS = Object.freeze(['N0', 'N1', 'N2'])
 export const FIELD_SLOT_MS = 300_000
+// 6 hari × 24 jam × 12 slot = 1728; beri ruang untuk sesi lebih panjang.
+export const MAX_HISTORY_ROWS = 5000
 const MIN_MS = 1_704_067_200_000
 const LOCATIONS = Object.freeze({
   N0: 'Hulu / Baseline',
@@ -16,6 +18,12 @@ const VALID = {
   turbidity: n => n >= 0 && n < 3000,
 }
 const number = n => typeof n === 'number' && Number.isFinite(n) ? n : null
+const INFO_FLAG = 'BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED'
+const KNOWN_FLAGS = new Set([
+  INFO_FLAG,
+  'TDS_ZERO_CHECK_CLAMP', 'TURB_ZERO_VERIFY',
+  'PH_INVALID', 'TDS_INVALID', 'TURB_INVALID_OR_MISSING', 'TURB_SATURATED',
+])
 
 export function readFieldNode(raw, node) {
   if (!FIELD_NODE_IDS.includes(node) || !raw || typeof raw !== 'object' || Array.isArray(raw)) return null
@@ -36,16 +44,26 @@ export function readFieldNode(raw, node) {
   }
   const rawFlags = Array.isArray(raw.quality_flags) ? raw.quality_flags : []
   if (raw.quality_flags !== undefined && !Array.isArray(raw.quality_flags)) return null
-  // A flag requiring review must not be hidden even if the numeric range passes.
-  const unknownFlags = rawFlags.filter(f => f !== 'BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED')
-  if (unknownFlags.length) {
-    warnings.push('QUALITY_FLAGS_REVIEW')
+  // Flag yang dikenal: peringatan (nilai tetap ditampilkan) atau penanda
+  // nilai hilang (field-nya memang tidak ada). Flag lain yang tidak dikenal
+  // tetap membuat semua nilai node disembunyikan untuk ditinjau.
+  for (const flag of rawFlags) {
+    if (KNOWN_FLAGS.has(flag)) {
+      if (flag !== INFO_FLAG && !warnings.includes(flag)) warnings.push(flag)
+      continue
+    }
+    if (!warnings.includes('QUALITY_FLAGS_REVIEW')) warnings.push('QUALITY_FLAGS_REVIEW')
     for (const key of Object.keys(values)) values[key] = null
   }
+  // Nilai sensor yang hilang sudah dicatat sebagai <SENSOR>_INVALID.
+  const deduped = warnings.filter(w => !(w === 'TURB_INVALID_OR_MISSING' && warnings.includes('TURBIDITY_INVALID')))
+  warnings.length = 0
+  warnings.push(...deduped)
   return {
     node, node_id: node, location: LOCATIONS[node], timestamp,
     lastSeen: timestamp, sequence: sequence ?? null,
     rssi: number(raw.rssi), hasData: true,
+    latitude: number(raw.latitude), longitude: number(raw.longitude),
     qualityWarnings: warnings, verified: false,
     ...values,
   }
@@ -97,7 +115,7 @@ export function fieldHistoryRows(rawHistory, limit = 60) {
         value && typeof value === 'object' && !Array.isArray(value)
     })
     .sort(([a], [b]) => Number(a) - Number(b))
-    .slice(-Math.max(1, Math.min(limit, 240)))
+    .slice(-Math.max(1, Math.min(limit, MAX_HISTORY_ROWS)))
     .map(([key, source]) => {
       const slot = Number(key)
       const row = {
@@ -122,4 +140,22 @@ export function fieldHistoryRows(rawHistory, limit = 60) {
           source.analysis.source_timestamp_ms === slot) row.analysis = source.analysis
       return row
     })
+}
+
+
+const WARNING_LABELS = {
+  PH_INVALID: 'pH di luar 0–14 / tidak terbaca',
+  TDS_INVALID: 'TDS tidak terbaca',
+  TURBIDITY_INVALID: 'turbiditas tidak terbaca',
+  TURB_INVALID_OR_MISSING: 'turbiditas tidak terbaca',
+  TURB_SATURATED: 'turbiditas jenuh (batas sensor)',
+  TDS_ZERO_CHECK_CLAMP: 'TDS = 0 (cek sensor / clamp)',
+  TURB_ZERO_VERIFY: 'turbiditas = 0 (perlu verifikasi)',
+  QUALITY_FLAGS_REVIEW: 'flag kualitas perlu ditinjau',
+  NO_VALID_DATA: 'belum ada data valid',
+}
+
+// Label manusiawi untuk kode peringatan kualitas data.
+export function describeQualityWarning(code) {
+  return WARNING_LABELS[code] ?? code
 }

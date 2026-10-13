@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   formatFieldLatestNodes, fieldHistoryRows, readFieldNode, FIELD_SLOT_MS,
-  selectFieldHardwareExport,
+  selectFieldHardwareExport, describeQualityWarning,
 } from '../src/services/fieldHardwarePreview.js'
 import { readFileSync } from 'node:fs'
 
@@ -73,22 +73,26 @@ test('history timestamp mismatch, spoofed node ID and non-numeric values rejecte
   assert.equal(readFieldNode({ ...raw.N0.latest, timestamp: 80 }, 'N0'), null)
 })
 
-test('real Firebase preview is explicitly development-only; default config remains simulation', () => {
+test('hardware_test is the default read-only source; simulation stays selectable; no login form', () => {
   const source = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
-  const entry = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8')
+  const dashboard = readFileSync(new URL('../src/TasnimDashboard.jsx', import.meta.url), 'utf8')
+  const bar = readFileSync(new URL('../src/components/DataSourceBar.jsx', import.meta.url), 'utf8')
+  const session = readFileSync(new URL('../src/services/useFirebaseSession.js', import.meta.url), 'utf8')
   const cfg = JSON.parse(readFileSync(new URL('../tasnim.config.json', import.meta.url), 'utf8'))
+  // Backend default config remains SIMULATION; the website chooses at runtime.
   assert.equal(cfg.activeDataRoot, 'simulation')
-  assert.match(source, /import\.meta\.env\.DEV/)
-  assert.match(source, /VITE_TASNIM_FIELD_PREVIEW/)
   assert.match(source, /FIELD_PREVIEW \? 'hardware_test' : tasnimConfig\.activeDataRoot/)
-  assert.match(entry, /fieldEnabled/)
-  assert.match(entry, /FieldHardwarePreview/)
-  const preview = readFileSync(new URL('../src/FieldHardwarePreview.jsx', import.meta.url), 'utf8')
-  assert.match(preview, /<App fieldSnapshot=/)
-  assert.match(preview, /Pilih ekspor JSON hardware_test/)
-  assert.doesNotMatch(preview, /signInWithEmailAndPassword|onAuthStateChanged|type="password"/)
+  assert.match(source, /dataSource = SOURCE_HARDWARE/)
+  assert.match(dashboard, /<App\s+key=\{appKey\}/)
+  assert.match(bar, /Simulasi/)
+  assert.match(bar, /Buka CSV\/JSON/)
+  for (const text of [source, dashboard, bar, session]) {
+    assert.doesNotMatch(text, /signInWithEmailAndPassword|type="password"/)
+    assert.doesNotMatch(text, /\b(set|push|update|remove)\(ref\(/)
+  }
+  assert.match(session, /signInAnonymously/)
   assert.match(source, /fieldReadError/)
-  assert.match(source, /hardware_test.*tanpa autentikasi/)
+  assert.match(source, /permissionHelp\(session\)/)
 })
 
 
@@ -121,14 +125,32 @@ test('local JSON import rejects unrelated Firebase dumps and missing nodes', () 
   }
 })
 
-test('dashboard clearly differentiates local JSON, permission-denied and realtime', () => {
+test('dashboard clearly differentiates local file, permission-denied and realtime', () => {
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
   const summary = readFileSync(new URL('../src/components/SystemOverview.jsx', import.meta.url), 'utf8')
+  const session = readFileSync(new URL('../src/services/useFirebaseSession.js', import.meta.url), 'utf8')
   assert.match(app, /fieldSnapshot !== undefined/)
   assert.match(app, /setFirebaseStatus\('file'\)/)
-  assert.match(summary, /Pratinjau JSON Lokal/)
+  assert.match(summary, /Pratinjau File Lokal/)
   assert.match(app, /setFieldReadError/)
   assert.match(app, /tidak dapat dibaca/)
-  assert.doesNotMatch(readFileSync(new URL('../src/FieldHardwarePreview.jsx', import.meta.url), 'utf8'),
-    /set\(|push\(|update\(|remove\(/)
+  assert.match(session, /hardware_test tanpa autentikasi/)
+  assert.match(session, /Anonymous/)
+})
+
+test('known warning flags keep values visible; unknown flags still hide the node', () => {
+  const base = { ...raw.N0.latest, tds: 0 }
+  const warned = readFieldNode({ ...base, quality_flags: ['TDS_ZERO_CHECK_CLAMP'] }, 'N0')
+  assert.equal(warned.ph, 7.43)
+  assert.equal(warned.tds, 0)
+  assert.deepEqual(warned.qualityWarnings, ['TDS_ZERO_CHECK_CLAMP'])
+  const missingTurb = readFieldNode({ ...raw.N1.latest, ph: 7.1, turbidity: undefined,
+    quality_flags: ['TURB_INVALID_OR_MISSING'] }, 'N1')
+  assert.equal(missingTurb.ph, 7.1)
+  assert.equal(missingTurb.turbidity, null)
+  assert.ok(missingTurb.qualityWarnings.includes('TURBIDITY_INVALID'))
+  const unknown = readFieldNode({ ...raw.N0.latest, quality_flags: ['SENSOR_DISCONNECTED'] }, 'N0')
+  assert.equal(unknown.ph, null)
+  assert.ok(unknown.qualityWarnings.includes('QUALITY_FLAGS_REVIEW'))
+  assert.equal(describeQualityWarning('TDS_ZERO_CHECK_CLAMP'), 'TDS = 0 (cek sensor / clamp)')
 })

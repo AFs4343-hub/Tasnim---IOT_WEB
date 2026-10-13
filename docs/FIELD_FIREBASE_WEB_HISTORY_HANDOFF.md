@@ -1,5 +1,13 @@
 # TAS[N]IM — Real device Firebase → Website → History (candidate)
 
+> **Diperbarui:** langkah yang berlaku sekarang ada di
+> [PANDUAN_WEBSITE_DATA_ALAT.md](PANDUAN_WEBSITE_DATA_ALAT.md). Website kini
+> membaca `hardware_test` secara default (dev & build produksi) dengan sesi
+> anonim otomatis, `VITE_TASNIM_FIELD_PREVIEW` tidak lagi diperlukan, dan
+> perekam history LIVE (`iot/hardware_test_history_recorder.py`, dry-run
+> default) serta impor CSV microSD sudah tersedia. Dokumen di bawah adalah
+> catatan historis.
+
 **Goal:** Show actual ESP32 N0/N1/N2 values from Firebase
 `/hardware_test/nodes/<node>/latest`, read persistent history from
 `/hardware_test/history`, and eventually present actual model output. Do

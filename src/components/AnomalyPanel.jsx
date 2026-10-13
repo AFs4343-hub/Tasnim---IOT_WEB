@@ -260,6 +260,12 @@ function AnomalyPanel({
       : '-'
 
 
+  // |z| >= 3 = nilai jauh dari baseline normal model (aturan statistik
+  // umum), dipakai sebagai peringatan tambahan, bukan label anomali.
+  const extremeZ =
+    typeof zscore.zscore === 'number'
+    && Math.abs(zscore.zscore) >= 3
+
   const isoScore =
     typeof iso.decision_score === 'number'
       ? iso.decision_score.toFixed(3)
@@ -272,7 +278,7 @@ function AnomalyPanel({
       {/* TASNIM_AI_NOTICE_V1 */}
 
       {analysis?.model_stage === 'PROTOTYPE_SIMULATION'
-        && ['REAL_TEST', 'FIELD'].includes(analysis?.data_source)
+        && ['REAL_TEST', 'FIELD', 'HARDWARE_TEST'].includes(analysis?.data_source)
         && (
           <p className="mb-4 text-xs font-semibold text-amber-300">
             MODEL PROTOTIPE — BELUM TERVALIDASI LAPANGAN
@@ -305,6 +311,26 @@ function AnomalyPanel({
             Status utama mengikuti Random Forest.
             Perbedaan hasil perlu ditinjau sebelum
             mengambil kesimpulan kualitas air.
+          </p>
+        </div>
+      )}
+
+
+      {isSynced && extremeZ && analysis?.status === 'NORMAL' && (
+        <div
+          role="alert"
+          className="mb-5 rounded-xl border border-amber-700 p-4"
+        >
+          <p className="font-semibold text-amber-300">
+            Z-SCORE EKSTREM MESKI MODEL NORMAL
+          </p>
+          <p className="mt-2 text-sm text-slate-300">
+            {zscore.parameter} {zscore.node} berjarak z = {zValue} dari
+            baseline normal model. Periksa sensor/kalibrasi node tersebut.
+          </p>
+          <p className="mt-2 text-xs text-slate-400">
+            Random Forest prototipe dilatih dari data simulasi sehingga belum
+            mengenal pola sensor lapangan seperti nilai 0 atau baseline yang berbeda.
           </p>
         </div>
       )}
@@ -566,8 +592,8 @@ function AnomalyPanel({
                 {zscore.node || '-'}
               </p>
 
-              <p className="mt-1 text-cyan-400">
-                z = {zValue}
+              <p className={`mt-1 ${extremeZ ? 'font-semibold text-amber-300' : 'text-cyan-400'}`}>
+                z = {zValue}{extremeZ ? ' (|z| ≥ 3)' : ''}
               </p>
 
             </div>

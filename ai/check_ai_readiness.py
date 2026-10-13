@@ -13,6 +13,8 @@ SLOT_MS = 300_000
 WITA = timezone(timedelta(hours=8))
 DB_URL = 'https://omirisetmonitoring-default-rtdb.asia-southeast1.firebasedatabase.app'
 INFO_FLAGS = {'BASIC_RANGE_PASS_NOT_ACCURACY_CERTIFIED'}
+# Peringatan fisik yang nilainya tetap angka valid (bukan nilai hilang).
+WARNING_FLAGS = {'TDS_ZERO_CHECK_CLAMP', 'TURB_ZERO_VERIFY'}
 
 
 def valid_number(value, sensor):
@@ -23,7 +25,7 @@ def valid_number(value, sensor):
     return 0 <= value <= 14 if sensor == 'ph' else value >= 0
 
 
-def audit_slot(slot_key, record):
+def audit_slot(slot_key, record, allowed_flags=INFO_FLAGS):
     reasons = []
     try:
         slot = int(slot_key)
@@ -51,7 +53,7 @@ def audit_slot(slot_key, record):
         if not isinstance(flags, list):
             reasons.append(f'{node}:BAD_QUALITY_FLAGS')
         else:
-            blocked = [str(flag) for flag in flags if flag not in INFO_FLAGS]
+            blocked = [str(flag) for flag in flags if flag not in allowed_flags]
             if blocked:
                 reasons.append(f'{node}:FLAGS={",".join(blocked)}')
     return reasons
@@ -75,7 +77,7 @@ def self_test():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root', choices=('real_test', 'field'), default='real_test')
+    parser.add_argument('--root', choices=('real_test', 'field', 'hardware_test'), default='real_test')
     parser.add_argument('--limit', type=int, default=100)
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()

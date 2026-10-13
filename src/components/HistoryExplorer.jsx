@@ -1,3 +1,4 @@
+import { witaDate, witaTime, witaDayStartMs, witaDayEndMs } from '../services/timeFormat.js'
 import {
   useEffect,
   useMemo,
@@ -59,19 +60,12 @@ function HistoryExplorer({
 
   const filteredRecords = useMemo(() => {
 
+    // Tanggal filter dibaca sebagai hari WITA.
     const startTimestamp =
-      startDate
-        ? new Date(
-            `${startDate}T00:00:00`
-          ).getTime()
-        : null
+      witaDayStartMs(startDate)
 
     const endTimestamp =
-      endDate
-        ? new Date(
-            `${endDate}T23:59:59.999`
-          ).getTime()
-        : null
+      witaDayEndMs(endDate)
 
 
     return records.filter((record) => {
@@ -218,29 +212,12 @@ function HistoryExplorer({
     timestamp
   ) => {
 
-    const date =
-      new Date(timestamp)
-
     return {
       date:
-        date.toLocaleDateString(
-          'id-ID',
-          {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-          }
-        ),
+        witaDate(timestamp, { year: true }),
 
       time:
-        date.toLocaleTimeString(
-          'id-ID',
-          {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          }
-        )
+        `${witaTime(timestamp, { seconds: true })} WITA`
     }
 
   }

@@ -73,32 +73,33 @@ bash scripts/check_ai_v2_candidate.sh
 The script checks branch, simulation config and Emulator isolation first;
 it must not be pointed at a public Firebase project.
 
-## Field-device Firebase read-only preview (for OMI prototype)
+## Website dengan data alat (hardware_test) — mulai di sini
 
-Actual ESP32 N0/N1/N2 values currently exist at
-`hardware_test/nodes/<node>/latest` without canonical V2 metadata.
-A **development-only, read-only** mode adapts these values
-for the existing dashboard. Set `VITE_TASNIM_FIELD_PREVIEW=YES` in a
-local gitignored `.env.local`, then run `npm run dev`. The
-**dashboard now opens immediately without a website login form**.
-The existing Firebase Rules still require `auth != null` for live
-`hardware_test` reads: without an authorized session, direct
-subscriptions will show a permission notice. Use **Lihat ekspor JSON
-lokal** in the preview to view the exported `hardware_test` JSON
-locally, without uploading data or modifying Firebase. Local-file mode
-is **not realtime**; live graph and History subscriptions update only
-when Firebase permits reads and actual `hardware_test/history` exists.
-Never commit credentials or change LIVE Rules to bypass permissions.
+**Panduan lengkap (Bahasa Indonesia): [docs/PANDUAN_WEBSITE_DATA_ALAT.md](docs/PANDUAN_WEBSITE_DATA_ALAT.md).**
 
-A separate **Emulator-only** history capture prototype demonstrates how
-new observed legacy samples can be archived as immutable 5-minute slots,
-without modifying `nodes/latest`. It is **not deployed or activated**
-against the real Firebase. See
-[Firebase → website → history handoff](docs/FIELD_FIREBASE_WEB_HISTORY_HANDOFF.md)
-for setup, gaps, and the next required approval.
+- The dashboard opens on **Data Alat (Firebase)**: read-only, real-time
+  `hardware_test/nodes`, `history` and `analysis`, in development and in
+  production builds. **Simulasi** remains one click away and is never mixed
+  with device data. **Buka CSV/JSON** views microSD CSV files or JSON exports
+  locally in the browser (nothing uploaded).
+- No login form: the browser creates an anonymous Firebase session so the
+  existing `auth != null` read rule passes (enable *Anonymous* in Firebase
+  Authentication). With the current production Rules an anonymous session
+  could also WRITE `hardware_test`; the one-line candidate
+  `database.rules.web-anonymous-read.candidate.json` blocks that while keeping
+  device (email/password) writes. It is NOT deployed by this repository.
+- Firmware currently writes only `latest`. History is produced by
+  `python3 -m iot.hardware_test_history_recorder --write` (immutable 5-minute
+  slots) and/or `python3 scripts/import_sd_csv.py tasnim_N*.csv --write`;
+  AI analysis by `python3 -m ai.realtime_inference --root hardware_test`.
+  `python3 scripts/run_hardware_test_stack.py --write` runs recorder + AI
+  together. All Python tools default to dry-run.
+- The AI model is still a prototype trained on simulated data; its verdicts on
+  field data are NOT validated (see the guide, section 7).
 
 ## Docs and limits
 
+- [Panduan website + data alat](docs/PANDUAN_WEBSITE_DATA_ALAT.md)
 - [Candidate release gates](docs/GITHUB_CANDIDATE_RELEASE_GATE_20261012.md)
 - [Security, nonce, backup and incident runbook](docs/CANDIDATE_SECURITY_OPERATIONS_RUNBOOK_20261012.md)
 - [AI V2 worker](docs/HARDWARE_TEST_AI_WORKER_V2_CANDIDATE.md)
