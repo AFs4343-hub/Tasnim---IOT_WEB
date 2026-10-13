@@ -36,7 +36,16 @@ export function useFirebaseSession(enabled) {
     if (!enabled) return undefined
     let cancelled = false
     let attempted = false
-    const auth = tasnimAuth()
+    let auth
+    try {
+      auth = tasnimAuth()
+    } catch (error) {
+      // Mis. VITE_FIREBASE_API_KEY kosong: jangan buat seluruh halaman crash.
+      queueMicrotask(() => {
+        if (!cancelled) setSession({ ...IDLE, status: 'signed_out', errorCode: error?.code ?? 'unknown' })
+      })
+      return () => { cancelled = true }
+    }
     const unsubscribe = onAuthStateChanged(auth, user => {
       if (cancelled) return
       if (user) {

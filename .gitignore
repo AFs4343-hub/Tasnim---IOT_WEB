@@ -46,3 +46,6 @@ iot/serviceAccountKey.json
 # ESP32 hardware credentials
 secrets.h
 iot/esp32/**/secrets.h
+
+# Cadangan Rules LIVE dari scripts/firebase_project_setup.py
+backups/

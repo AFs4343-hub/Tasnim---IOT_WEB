@@ -26,6 +26,25 @@ tercampur**; pilih lewat tombol **Data Alat / Simulasi** di atas dashboard.
 
 ---
 
+## 0. Cara tercepat — satu perintah di terminal Codespaces
+
+```bash
+git pull --ff-only origin infra/field-data
+bash scripts/setup_tasnim.sh --run
+```
+
+Skrip memasang dependensi, mengambil service account dari Codespaces secret
+`FIREBASE_SERVICE_ACCOUNT*` (jika ada), mengisi `.env.local` dari proyek
+Firebase, mengaktifkan login Anonymous, menawarkan Rules aman (harus ketik
+`YA`, Rules lama dicadangkan ke `backups/`), menyiapkan model AI, lalu
+menjalankan website. Langkah yang tidak diizinkan oleh service account
+ditandai `[MANUAL]` beserta tautan Console-nya. Bagian 1 di bawah adalah
+langkah manual yang setara.
+
+Jika website hanya menampilkan pesan **"Konfigurasi Firebase belum
+lengkap"**, berarti `.env.local` belum terisi — jalankan skrip di atas, lalu
+hentikan dan jalankan ulang `npm run dev`.
+
 ## 1. Persiapan (sekali saja)
 
 1. **Konfigurasi website.** Salin `.env.example` menjadi `.env.local` lalu isi
