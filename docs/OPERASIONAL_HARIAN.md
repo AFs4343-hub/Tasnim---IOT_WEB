@@ -8,6 +8,7 @@ Setelah persiapan sekali jalan di bawah, pemakaian sehari-hari cukup lewat
 | Lihat website | Buka **https://omirisetmonitoring.web.app** |
 | History live saat sesi | GitHub → **Actions → TASNIM sesi live → Run workflow** |
 | Masukkan CSV microSD | Upload ke `data/sd/` → **Actions → TASNIM impor CSV microSD + AI → Run workflow** |
+| Hapus data tak diperlukan | **Actions → TASNIM hapus data (cadangan otomatis) → Run workflow** |
 
 Tidak ada langkah yang membuat, mengganti, atau menghapus API key. Website
 memakai API key yang sama dengan ESP32, dan firmware tidak perlu diubah.
@@ -80,6 +81,30 @@ git pull --ff-only origin infra/field-data
 
 Impor CSV hanya mengisi slot yang masih kosong, jadi aman dijalankan
 setelah sesi live: data live tidak ditimpa, celahnya dilengkapi dari CSV.
+
+### Menghapus data yang tidak diperlukan (cadangan otomatis)
+Contoh: data uji coba sebelum penelitian, atau 10 menit saat sensor terangkat.
+
+1. Tab **Actions** → **TASNIM hapus data (cadangan otomatis)** → **Run workflow**.
+2. Isi **dari** dan **sampai** (WITA, format `2026-10-12 00:00`), pilih
+   **node** (`semua` atau satu node), isi **alasan**, mode **cek** → jalankan.
+   Lihat ringkasan run: daftar slot yang akan terhapus.
+3. Jika benar, jalankan lagi dengan input yang sama tetapi mode **hapus**.
+4. Yang terjadi otomatis:
+   - data disalin dulu ke tempat sampah Firebase (`tasnim_trash`, tidak tampil
+     di website) dan ke Artifacts **cadangan_hapus** (90 hari), baru dihapus;
+   - rentangnya masuk **daftar hapus**: impor CSV dan sesi live otomatis
+     melewati data di rentang itu, jadi CSV microSD tidak perlu diedit dan
+     data tidak masuk lagi;
+   - hasil AI terbaru di website diperbaiki bila ikut terhapus.
+5. Salah hapus? mode **daftar** untuk melihat ID cadangan, lalu mode
+   **pulihkan** + isi **id_cadangan**. Data kembali (tanpa menimpa slot yang
+   sudah terisi) dan rentangnya dicabut dari daftar hapus.
+
+Tips: rentang yang belum ada di Firebase pun boleh "dihapus" — gunanya
+mencegah baris CSV di rentang itu ikut diimpor nanti.
+
+Dari terminal Codespaces: `python3 scripts/hapus_data.py --help`.
 
 ## C. Kuota GitHub Actions (repo private)
 

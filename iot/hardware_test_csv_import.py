@@ -27,6 +27,7 @@ from iot.hardware_test_history_recorder import (
     DEFAULT_CREDENTIALS, DEFAULT_DATABASE_URL, NODES, RECENT_SLOT_GUARD_MS, ROOT,
     initialize_firebase, packet_from_observation, store_packet, wita,
 )
+from iot.hardware_test_delete import is_deleted, load_deleted_ranges
 from iot.hardware_test_legacy_history_capture_v1 import FieldCaptureRejected
 from iot.sd_csv import CsvFormatError, read_csv_file
 
@@ -34,11 +35,12 @@ DEFAULT_MODEL = Path("ai/models/tasnim_ai_bundle.joblib")
 BATCH_SIZE = 400
 
 
-def build_import(readings, *, now_ms=None):
+def build_import(readings, *, now_ms=None, deleted_ranges=()):
     """Pembacaan CSV → paket history kanonik, satu per (slot, node).
 
     Sampel pertama (timestamp terkecil, lalu sequence) dalam slot dipakai,
-    sama dengan perekam live dan pembaca CSV di website.
+    sama dengan perekam live dan pembaca CSV di website. Baris yang masuk
+    rentang di daftar hapus dilewati (``excluded_deleted``).
     """
     now = int(time.time() * 1000) if now_ms is None else now_ms
     history = {}
@@ -54,6 +56,9 @@ def build_import(readings, *, now_ms=None):
                 raw, node, now_ms=now, allow_missing_sequence=True)
         except (FieldCaptureRejected, ValueError) as exc:
             rejected[str(exc).split(":")[-1]] += 1
+            continue
+        if deleted_ranges and is_deleted(deleted_ranges, slot, node):
+            stats["excluded_deleted"] += 1
             continue
         stats["valid_rows"] += 1
         stats[f"rows_{node}"] += 1
@@ -145,6 +150,8 @@ def print_summary(imported, skipped, files):
     if skipped:
         reasons = Counter(s["reason"] for s in skipped)
         print(f"Baris dilewati : {len(skipped)} {dict(reasons)}")
+    if stats["excluded_deleted"]:
+        print(f"Daftar hapus   : {stats['excluded_deleted']} baris dilewati (rentang yang pernah dihapus)")
     if imported["rejected"]:
         print(f"Ditolak kontrak: {sum(imported['rejected'].values())} {dict(imported['rejected'])}")
     print(f"Slot 5 menit   : {stats['slots']} (lengkap 3 node: {stats['complete_slots']})")
@@ -189,8 +196,15 @@ def main(argv=None):
         readings.extend(rows)
         skipped.extend({**s, "file": path.name} for s in skip)
 
-    imported = build_import(readings)
+    db = None
+    deleted_ranges = []
+    if args.write or args.credentials.is_file() or os.getenv("FIREBASE_DATABASE_EMULATOR_HOST"):
+        db = initialize_firebase(args.credentials, args.database_url)
+        deleted_ranges = load_deleted_ranges(db)
+    imported = build_import(readings, deleted_ranges=deleted_ranges)
     print("TAS[N]IM impor CSV microSD → hardware_test/history")
+    if db is None:
+        print("[INFO] Daftar hapus tidak dicek (tanpa kunci service account).")
     print_summary(imported, skipped, [p.name for p in args.files])
     if not imported["history"]:
         raise SystemExit("[STOP] Tidak ada baris valid untuk diimpor.")
@@ -213,7 +227,6 @@ def main(argv=None):
     if not args.write:
         print("[DRY-RUN] Firebase tidak ditulis. Tambah --write untuk mengisi hardware_test/history.")
         return
-    db = initialize_firebase(args.credentials, args.database_url)
     outcome = write_history(db, imported["history"])
     print(f"[WRITE] Firebase: {dict(outcome)}")
     print("Berikutnya: python3 -m ai.realtime_inference --root hardware_test --once "

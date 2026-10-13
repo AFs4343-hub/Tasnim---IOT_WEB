@@ -1,0 +1,120 @@
+name: TASNIM hapus data (cadangan otomatis)
+
+# GitHub → Actions → "TASNIM hapus data" → Run workflow.
+# Selalu jalankan mode "cek" dulu; mode "hapus" menyalin data ke tempat sampah
+# Firebase (tasnim_trash) + artifact sebelum menghapus, lalu mencatat rentang
+# di daftar hapus sehingga impor CSV & sesi live tidak memasukkannya lagi.
+# Salah hapus? mode "pulihkan" + ID cadangan. Waktu dalam WITA.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'cek = lihat dulu; hapus; daftar = riwayat; pulihkan = kembalikan'
+        required: true
+        type: choice
+        default: cek
+        options: [cek, hapus, daftar, pulihkan]
+      dari:
+        description: 'Dari (WITA), format YYYY-MM-DD HH:MM'
+        required: false
+        default: ''
+      sampai:
+        description: 'Sampai (WITA), format YYYY-MM-DD HH:MM'
+        required: false
+        default: ''
+      node:
+        description: 'Node yang dihapus'
+        required: true
+        type: choice
+        default: semua
+        options: [semua, N0, N1, N2]
+      alasan:
+        description: 'Alasan (wajib untuk hapus), mis. uji coba'
+        required: false
+        default: ''
+      id_cadangan:
+        description: 'ID cadangan (hanya untuk pulihkan)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tasnim-hapus-data
+  cancel-in-progress: false
+
+jobs:
+  hapus:
+    name: Hapus / pulihkan data hardware_test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MODE: ${{ inputs.mode }}
+      DARI: ${{ inputs.dari }}
+      SAMPAI: ${{ inputs.sampai }}
+      NODE: ${{ inputs.node }}
+      ALASAN: ${{ inputs.alasan }}
+      ID_CADANGAN: ${{ inputs.id_cadangan }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ai/requirements.txt
+
+      - name: Pasang dependensi Python
+        run: python -m pip install -r ai/requirements.txt
+
+      - name: Kunci service account (secret)
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [[ -z "$SA" ]]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT belum diisi. Lihat docs/OPERASIONAL_HARIAN.md."; exit 1
+          fi
+          umask 077
+          printf '%s' "$SA" > iot/serviceAccountKey.json
+
+      - name: Jalankan
+        run: |
+          set -o pipefail
+          args=()
+          case "$MODE" in
+            daftar)   args=(--daftar) ;;
+            pulihkan) [[ -n "$ID_CADANGAN" ]] || { echo "::error::Isi id_cadangan"; exit 1; }
+                      args=(--pulihkan "$ID_CADANGAN") ;;
+            cek|hapus)
+              [[ -n "$DARI" && -n "$SAMPAI" ]] || { echo "::error::Isi 'dari' dan 'sampai' (YYYY-MM-DD HH:MM, WITA)"; exit 1; }
+              args=(--dari "$DARI" --sampai "$SAMPAI" --alasan "$ALASAN")
+              [[ "$NODE" != "semua" ]] && args+=(--node "$NODE")
+              [[ "$MODE" == "hapus" ]] && args+=(--hapus --ya) ;;
+          esac
+          python scripts/hapus_data.py "${args[@]}" | tee hasil.log
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          {
+            echo "## Hapus data — mode: $MODE"
+            echo '```'
+            cat hasil.log 2>/dev/null || echo "(tidak berjalan)"
+            echo '```'
+            [[ "$MODE" == "cek" ]] && echo "Belum ada yang dihapus. Jika daftar di atas benar, jalankan lagi dengan mode **hapus**."
+            [[ "$MODE" == "hapus" ]] && echo "Cadangan juga tersedia di Artifacts (**cadangan_hapus**)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.mode == 'hapus'
+        with:
+          name: cadangan_hapus
+          path: backups/hapus_*.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Hapus kunci dari runner
+        if: always()
+        run: rm -f iot/serviceAccountKey.json
